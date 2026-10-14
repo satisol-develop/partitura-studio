@@ -166,6 +166,28 @@ git push -u origin main
 
 > `node_modules/` y `out/` no se suben: ya están excluidos en `.gitignore`.
 
+Antes de empujar, la comprobación de lo que **se va a subir** (no del código,
+que eso ya lo comprueba el flujo):
+
+```bash
+GH_TOKEN=… npm run publish:check
+```
+
+Comprueba tres cosas que se deciden al compilar y que ya no se pueden arreglar
+después: que en lo publicado no haya ninguna `SERVICE_KEY`, `SESSION_SECRET`,
+`PASSWORD_SALT` ni resto de servidor, y ningún `.env` que se pueda compilar sin
+querer; que la **puerta de acceso esté puesta** (si alguien publicó
+`LOGIN_REQUIRED=false`, aquí sale en rojo); y que la ruta base y la URL del
+backend cuadren con lo que publicará GitHub. Al final sirve el artefacto y
+imprime la lista de lo que sólo se puede ver abriendo la página: «Entrar»,
+contraseña equivocada, correo fuera de la lista, sincronizar, ventana privada.
+
+Con `GH_TOKEN` lee las variables del repositorio —esas son las que GitHub
+incrustará de verdad—; sin ella usa las de este entorno y lo dice, porque si no
+coinciden con las de *Settings → Variables*, lo que compruebas no es la
+publicación. `--sin-build` comprueba `out/` tal cual está y `--mock` enciende
+el doble del backend para probar sin tocar tu Drive.
+
 ---
 
 ## 4. Encender GitHub Pages
@@ -255,6 +277,9 @@ npm test
 ---
 
 ## 7. Probar en local antes de publicar
+
+> La comprobación completa del artefacto —puerta, fugas y ruta base— es
+> `npm run publish:check` (ver el final de la sección 3).
 
 ```bash
 npm install

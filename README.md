@@ -180,6 +180,40 @@ se dispara al empujar a `main`. Los pasos que importan, y por qué:
   (`include-hidden-files: true`). Sin esa opción el `touch` se quedaba en el
   runner y el sitio se publicaba sin el archivo, con el paso en verde.
 
+**Antes de empujar: `publish:check`.** El flujo comprueba el código; esta
+comprobación mira lo que **se va a subir**, que es donde ya no se puede arreglar
+nada. Compila con las mismas variables que usará GitHub —las lee del repositorio
+con `GH_TOKEN` y, sin ella, usa las de este entorno y lo dice— y comprueba:
+
+```bash
+GH_TOKEN=… npm run publish:check
+
+✔ puerta de acceso: sin crear: se pide acceso por defecto
+✔ ninguna llave, .env ni resto de servidor en lo publicado
+✔ ruta base /partitura-studio
+✔ endpoint https://script.google.com/macros/s/…/exec
+✔ .nojekyll
+✔ el servidor responde en su ruta   ·   la raíz da 404 (es un sitio de proyecto)
+Todo en verde: se puede publicar.
+```
+
+1. **Material privado**: ninguna `SERVICE_KEY`, `SESSION_SECRET`, `PASSWORD_SALT`
+   ni lista de usuarios dentro de `out/`, y ningún `.env` en el árbol que se
+   pueda compilar sin querer. No busca la configuración —la URL del backend es
+   pública y su sitio es estar incrustada en el cliente—, sino la parte que
+   protege.
+2. **La puerta de acceso**: con `LOGIN_REQUIRED=false` publicado, falla en rojo
+   aquí en vez de salir a la calle sin pantalla de acceso. `--sin-puerta` lo deja
+   en aviso para instalaciones de una sola persona.
+3. **Lo incrustado al construir**: la ruta base y la URL del backend, que son lo
+   único que no se puede cambiar después de publicar.
+
+Y termina con la lista de lo que sólo se puede ver abriendo la página: que
+salga «Entrar», que una contraseña equivocada diga lo mismo que un correo
+fuera de la lista, que se sincronice con Drive y que una ventana privada sin
+sesión vuelva a empezar en la puerta. `--sin-build` comprueba `out/` como está
+y `--mock` enciende además el doble del backend.
+
 Para probar el artefacto exacto que se publicará —con su `basePath`, sus
 rutas y sin proceso de Node detrás— está `tools/serve-out.mjs`:
 

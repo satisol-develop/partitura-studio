@@ -12,7 +12,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./tests/register-hooks.mjs --test",
-    "serve:out": "node tools/serve-out.mjs"
+    "serve:out": "node tools/serve-out.mjs",
+    "publish:check": "node tools/publish-check.mjs"
   },
   "dependencies": {
     "@tonejs/midi": "2.0.28",
