@@ -1,0 +1,38 @@
+{
+  "name": "partitura-studio",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./tests/register-hooks.mjs --test",
+    "serve:out": "node tools/serve-out.mjs"
+  },
+  "dependencies": {
+    "@tonejs/midi": "2.0.28",
+    "fflate": "^0.8.2",
+    "idb-keyval": "6.3.0",
+    "next": "16.4.0",
+    "opensheetmusicdisplay": "2.2.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.0",
+    "js-yaml": "^4.1.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3"
+  }
+}

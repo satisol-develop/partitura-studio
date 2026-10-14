@@ -1,0 +1,26 @@
+<!--
+  Favicon: el mismo símbolo que components/Logo.tsx (pentagrama anotado).
+  Va duplicado a propósito: esto es un archivo estático que el navegador pide
+  antes que nada y no puede importar la paleta. Si cambia la geometría en
+  Logo.tsx, hay que cambiarla aquí también.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <rect width="48" height="48" rx="13" fill="#1c1b19" />
+  <g stroke="#fdfcfa" stroke-opacity="0.34" stroke-width="1.3">
+    <line x1="7.5" y1="15" x2="40.5" y2="15" />
+    <line x1="7.5" y1="19" x2="40.5" y2="19" />
+    <line x1="7.5" y1="23" x2="40.5" y2="23" />
+    <line x1="7.5" y1="27" x2="40.5" y2="27" />
+    <line x1="7.5" y1="31" x2="40.5" y2="31" />
+  </g>
+  <rect x="8.5" y="20.6" width="15.5" height="4.6" rx="2.3" fill="#1a7f37" opacity="0.75" />
+  <path
+    d="M8.5 30.5c6 1.7 9.4-9.4 15.4-11.2"
+    fill="none"
+    stroke="#1f6feb"
+    stroke-width="2.8"
+    stroke-linecap="round"
+  />
+  <circle cx="35" cy="27.5" r="6" fill="none" stroke="#d1242f" stroke-width="1.5" opacity="0.45" />
+  <circle cx="35" cy="27.5" r="3.5" fill="#d1242f" />
+</svg>

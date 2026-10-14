@@ -1,0 +1,89 @@
+name: Publicar en GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Versiones comprobadas contra los repositorios de las acciones (majors
+      # publicados en el momento de escribir esto).
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Comprobaciones antes de publicar: si algo falla aquí, no se publica.
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+      # `configure-pages` resuelve el `base_path` del sitio (`/repo` en un sitio
+      # de proyecto, vacío en uno de usuario) y se lo pasamos al build, que lo
+      # incrusta en las rutas de la aplicación.
+      - name: Configurar Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      # `NEXT_PUBLIC_*` se incrusta en el JavaScript del cliente al construir,
+      # así que estas dos van aquí y no pueden cambiarse después sin volver a
+      # publicar. Son *variables* del repositorio (Settings → Secrets and
+      # variables → Actions → Variables), no secretos: la URL de una
+      # implementación de Apps Script es pública, y con login la aplicación ya
+      # no maneja ninguna llave.
+      #
+      #   DRIVE_ENDPOINT    URL que termina en /exec (si se deja vacía, la
+      #                     pantalla de acceso la pide la primera vez).
+      #   LOGIN_REQUIRED    "true" siempre, "false" nunca (una sola persona),
+      #                     o vacío para pedirlo en cuanto haya endpoint.
+      - name: Construir el sitio estático
+        run: npm run build
+        env:
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_DRIVE_ENDPOINT: ${{ vars.DRIVE_ENDPOINT }}
+          NEXT_PUBLIC_LOGIN_REQUIRED: ${{ vars.LOGIN_REQUIRED }}
+
+      # Las páginas servidas por Actions no pasan por Jekyll, pero `.nojekyll`
+      # evita el problema clásico si algún día se publica la carpeta de otra
+      # forma: Jekyll ignora las carpetas que empiezan por guion bajo, y `_next`
+      # es justo donde va todo el JavaScript y el CSS.
+      - name: Marcar el artefacto como «sin Jekyll»
+        run: touch out/.nojekyll
+
+      # El `touch` de arriba, por sí solo, no servía de nada: un archivo que
+      # empieza por punto es un archivo oculto, y `upload-pages-artifact` los
+      # deja fuera del artefacto salvo que se le pida (`include-hidden-files`
+      # existe desde la v5 y viene en `false`). Sin esta línea, `.nojekyll` se
+      # quedaba en el runner y el sitio se publicaba sin él, con el paso en
+      # verde y sin ningún aviso.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./out
+          include-hidden-files: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar
+        id: deployment
+        uses: actions/deploy-pages@v5

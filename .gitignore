@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+.DS_Store
+.env*
+!.env.example
+
+# Estado del entorno de trabajo (identificadores de la herramienta, no del
+# proyecto): no viaja al repositorio ni, por tanto, al sitio publicado.
+.freebuff/
