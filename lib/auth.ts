@@ -111,15 +111,17 @@ export function toDriveConfig(auth: AuthState): DriveConfig {
  *   - `"false"` → nunca se pide acceso. Es el modo de una sola persona, que
  *     usa su propio Drive sin compartir nada con nadie.
  *   - `"true"` → siempre se pide.
- *   - sin definir → se pide en cuanto hay una implementación configurada, y no
- *     antes: sin backend no hay plataforma que proteger, sólo datos que ya
- *     están en este navegador.
+ *   - sin definir, en blanco o con un valor que no se reconoce → también se
+ *     pide. **La puerta está puesta por defecto**: no depende de que haya
+ *     endpoint. Este sitio es público, una instalación a la que se le olvidó
+ *     crear la variable no puede salir a la calle sin puerta, y no saber si
+ *     hay servidor no es una razón para dejarla abierta. Con el backend aún
+ *     sin configurar la pantalla sale igual y pide la dirección del servidor,
+ *     que es preferible a publicar abierto por no haber puesto nada.
  */
-export function loginRequired(hasEndpoint: boolean): boolean {
+export function loginRequired(): boolean {
   const flag = (process.env.NEXT_PUBLIC_LOGIN_REQUIRED ?? "").trim().toLowerCase();
-  if (flag === "false") return false;
-  if (flag === "true") return true;
-  return hasEndpoint;
+  return flag !== "false";
 }
 
 /** ¿Se puede entrar sin red? Sólo con una sesión que aún no ha caducado. */

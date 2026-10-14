@@ -180,12 +180,17 @@ git push -u origin main
    | Nombre | Valor |
    | --- | --- |
    | `DRIVE_ENDPOINT` | La URL `/exec` del paso 1. |
-   | `LOGIN_REQUIRED` | `true` (o déjala sin crear: se pedirá acceso en cuanto haya endpoint). |
+   | `LOGIN_REQUIRED` | `true` (o déjala sin crear: se pide acceso igual). Sólo `false` quita la puerta. |
 
    Son *Variables*, no secrets: la URL es pública y la aplicación ya no maneja
    ninguna llave. Poner `LOGIN_REQUIRED` en `false` **quita** la pantalla de
    acceso (sólo tiene sentido en una instalación de una sola persona que no
-   comparte la carpeta con nadie); dejarla en `true` o sin crear pide acceso.
+   comparte la carpeta con nadie); en `true`, en blanco o sin crear, pide acceso.
+
+   La puerta está puesta por defecto, aunque `DRIVE_ENDPOINT` siga vacía: lo que
+   faltaría entonces es la dirección del servidor, y la pide la propia pantalla de
+   acceso la primera vez. Así un sitio publicado por olvido sale con la puerta
+   puesta y la lista de correos autorizados sigue mandando.
 
 4. Vuelve a lanzar la publicación: **Actions → Publicar en GitHub Pages →
    Run workflow** (o haz cualquier cambio y `git push`).
@@ -256,6 +261,14 @@ npm install
 npm run dev                 # http://localhost:3000
 ```
 
+La pantalla de acceso sale también en local, con la misma regla que en
+publicación: **por defecto hay puerta**, aunque todavía no haya backend. Para
+trabajar sin ella hay que apagarla expresamente:
+
+```bash
+NEXT_PUBLIC_LOGIN_REQUIRED=false npm run dev
+```
+
 Para probar el ciclo completo de Drive sin tocar tu Drive de verdad, arranca el
 doble del backend y entra contra él (te da el usuario y la contraseña al
 arrancar):
@@ -281,6 +294,7 @@ npm run serve:out -- 4173 /nombre-del-repo
 
 | Lo que ves | Qué pasa | Qué hacer |
 | --- | --- | --- |
+| Abres la dirección publicada y sale **Entrar**, con la casilla «Dirección del servidor» vacía | La puerta está puesta —por defecto lo está— pero `DRIVE_ENDPOINT` sigue sin crear, así que aún no hay URL. | No es un fallo: es la puerta esperando al backend. *Settings → Secrets and variables → Actions → Variables* → `DRIVE_ENDPOINT` con tu URL `/exec`, y **Actions → Publicar en GitHub Pages → Re-run all jobs** (la URL se incrusta al construir). Hasta entonces, quien tiene la URL puede escribirla en esa misma casilla. |
 | «No se pudo contactar con …» | No se llegó a hablar con el servidor. | Comprueba la URL (`/exec`), que la implementación esté publicada «para cualquiera» y la conexión. Si es una red con proxy, prueba desde otra. |
 | «La respuesta no era JSON» | Apps Script devolvió HTML: la implementación está desautorizada o no es pública. | Vuelve a implementar y autoriza; revisa *Quién tiene acceso*. |
 | «Correo o contraseña incorrectos» y estás seguro de la contraseña | La propiedad `USERS` no tiene esa línea, el `hash` se cortó al copiar, o la cuenta está desactivada. | Ejecuta `listarUsuarios()`: si aparece con «(desactivado)», `activarUsuario("correo")`; si no está, genera la línea con `generarUsuario` y vuelve a pegar `USERS`. |

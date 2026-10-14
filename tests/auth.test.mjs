@@ -236,16 +236,28 @@ test("hasValidSession distingue «no hay sesión» de «ya ha caducado»", () =>
 test("loginRequired se decide con la instalación, no por suposición", () => {
   const original = process.env.NEXT_PUBLIC_LOGIN_REQUIRED;
   try {
+    // Sin decir nada, la puerta está puesta. Es el caso que sale publicado
+    // cuando a alguien se le olvida crear la variable: no puede salir a la
+    // calle sin puerta, y no saber si hay servidor no es motivo para abrirla.
     delete process.env.NEXT_PUBLIC_LOGIN_REQUIRED;
-    // Sin backend configurado no hay plataforma que proteger: modo local.
-    assert.equal(loginRequired(false), false);
-    assert.equal(loginRequired(true), true);
+    assert.equal(loginRequired(), true);
 
-    process.env.NEXT_PUBLIC_LOGIN_REQUIRED = "true";
-    assert.equal(loginRequired(false), true, "forzado aunque aún no haya URL");
+    // También con la variable creada y en blanco, o con un valor que nadie
+    // reconoce: lo que quita la puerta es decir `false`, nada más.
+    process.env.NEXT_PUBLIC_LOGIN_REQUIRED = "";
+    assert.equal(loginRequired(), true, "variable creada y en blanco");
+
+    process.env.NEXT_PUBLIC_LOGIN_REQUIRED = "¡ quién sabe !";
+    assert.equal(loginRequired(), true, "valor inesperado");
+
+    process.env.NEXT_PUBLIC_LOGIN_REQUIRED = " TRUE ";
+    assert.equal(loginRequired(), true, "mayúsculas y espacios de más");
 
     process.env.NEXT_PUBLIC_LOGIN_REQUIRED = "false";
-    assert.equal(loginRequired(true), false, "una sola persona, sin puerta");
+    assert.equal(loginRequired(), false, "una sola persona, sin puerta");
+
+    process.env.NEXT_PUBLIC_LOGIN_REQUIRED = " FALSE ";
+    assert.equal(loginRequired(), false, "lo mismo escrito de otra forma");
   } finally {
     if (original === undefined) delete process.env.NEXT_PUBLIC_LOGIN_REQUIRED;
     else process.env.NEXT_PUBLIC_LOGIN_REQUIRED = original;

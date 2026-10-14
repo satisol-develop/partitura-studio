@@ -162,13 +162,11 @@ export default function Workspace() {
     );
   }
 
-  // La puerta. `loginRequired` decide si esta instalación la necesita y
+  // La puerta. `loginRequired` decide si esta instalación la necesita (por
+  // defecto sí, aunque aún no exista el backend: ver `lib/auth.ts`) y
   // `localOnly` es la única excepción: haber pedido expresamente ver lo que ya
   // está guardado en este equipo cuando no hay red para preguntar.
-  const needsLogin =
-    loginRequired(auth.endpoint.trim().length > 0) &&
-    !hasValidSession(auth) &&
-    !localOnly;
+  const needsLogin = loginRequired() && !hasValidSession(auth) && !localOnly;
 
   if (needsLogin) return <LoginView />;
 

@@ -50,8 +50,13 @@ jobs:
       #
       #   DRIVE_ENDPOINT    URL que termina en /exec (si se deja vacía, la
       #                     pantalla de acceso la pide la primera vez).
-      #   LOGIN_REQUIRED    "true" siempre, "false" nunca (una sola persona),
-      #                     o vacío para pedirlo en cuanto haya endpoint.
+      #   LOGIN_REQUIRED    Sólo `false` quita la pantalla de acceso (una sola
+      #                     persona que no comparte la carpeta con nadie).
+      #                     Cualquier otra cosa —`true`, en blanco o sin
+      #                     crear— pide acceso: la puerta está puesta por
+      #                     defecto, aunque todavía no exista DRIVE_ENDPOINT.
+      #                     Sin endpoint, la pantalla pide la dirección del
+      #                     servidor la primera vez.
       - name: Construir el sitio estático
         run: npm run build
         env:

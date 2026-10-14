@@ -23,6 +23,11 @@ npm test             # pruebas de la lógica con el runner de Node
 npm run build        # compilación de producción (export estático)
 ```
 
+La pantalla de acceso aparece también en `npm run dev`: **por defecto hay
+puerta**, igual que en publicación. Para trabajar sin ella hay que apagarla
+(`NEXT_PUBLIC_LOGIN_REQUIRED=false npm run dev`) o entrar contra el doble del
+backend, que ya se enciende sin más en [Probar sin Google](#probar-sin-google).
+
 Todo se guarda primero en **IndexedDB**, en el propio navegador: la aplicación
 funciona sin conexión. Opcionalmente se **sincroniza con una carpeta de tu
 Google Drive** (tus anotaciones y el MusicXML de cada partitura) a través de una
@@ -223,10 +228,14 @@ Qué se deduce de ahí, sin adornos:
   la que tiene las partituras. Esto es una puerta razonable para un aula o un
 grupo de estudio, no un sistema de seguridad.
 
-`NEXT_PUBLIC_LOGIN_REQUIRED=false` quita la puerta por completo, para quien use
-su propio Drive sin compartirlo con nadie. Sin esa variable, se pide acceso en
-cuanto hay una implementación configurada; sin backend no hay nada que
-proteger, sólo datos que ya están en el navegador.
+`NEXT_PUBLIC_LOGIN_REQUIRED=false` es la única forma de quitarla, y está pensada
+para quien usa su propio Drive sin compartirlo con nadie. **Sin esa variable —o
+con la variable en blanco— la puerta se enseña igual**, aunque todavía no exista
+ningún backend: con el sitio publicado es lo que hace falta, porque una
+instalación a la que se le olvidó crear la variable no puede salir a la calle
+sin puerta, y no saber si hay servidor no es razón para abrirla. Eso sí: sin
+`DRIVE_ENDPOINT` la pantalla de acceso pide la dirección del servidor la primera
+vez, así que entrar hasta que la pongas.
 
 ## Drive: anotaciones y MusicXML en tu carpeta
 
