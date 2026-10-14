@@ -93,10 +93,16 @@ script de Google que se ejecuta con tus permisos y guarda todo en tu Drive.
 7. Comprueba que responde, cambiando la URL y la contraseña:
 
    ```bash
-   curl -s -X POST 'https://script.google.com/macros/s/TU_URL/exec' \
-     -H 'Content-Type: text/plain' \
-     -d '{"action":"login","email":"tu@correo.com","password":"una-contraseña-larga"}'
+   curl -sL -H 'Content-Type: text/plain;charset=utf-8' \
+     -d '{"action":"login","email":"tu@correo.com","password":"una-contraseña-larga"}' \
+     'https://script.google.com/macros/s/TU_URL/exec'
    ```
+
+   El `-L` no es adorno: Apps Script responde primero con un **302 y el cuerpo
+   vacío**, y el resultado viaja en la redirección —igual que lo sigue el
+   navegador—, así que sin él el comando no imprime nada y parece que el script
+   no funciona. (Y no añadas `-X POST`: forzaría el método tras la redirección
+   y Google devolvería un `411 Length Required`.)
 
    Respuesta esperada (recortada):
 
