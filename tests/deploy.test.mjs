@@ -192,6 +192,15 @@ test("el sitio publicado no lleva ningún secreto dentro", () => {
   );
 });
 
+test("la guía no pierde el paso que hace falta la primera vez", () => {
+  // Sin Pages encendido con la fuente «GitHub Actions», `configure-pages`
+  // falla con «Get Pages site failed» y no hay nada que publicar. No se puede
+  // arreglar desde el flujo (crear el sitio por API pide un token con permiso
+  // de administración), así que lo único que queda es que la guía lo diga.
+  assert.match(guide, /Settings → Pages/, "el paso de encender Pages, con dónde está");
+  assert.ok(guide.includes("GitHub Actions"), "y con qué fuente hay que encenderlo");
+});
+
 test("los nombres que documenta la guía son los que lee el flujo", () => {
   // Si alguien renombra una variable en el flujo (o en la guía), quien siga los
   // pasos creará una variable que no sirve para nada y el sitio saldrá sin

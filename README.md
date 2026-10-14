@@ -150,6 +150,15 @@ npm run serve:out -- 4173           # sirve out/ como lo haría Pages
 El flujo está en [.github/workflows/deploy.yml](.github/workflows/deploy.yml) y
 se dispara al empujar a `main`. Los pasos que importan, y por qué:
 
+- **Antes del primer push hay que encender Pages**, una sola vez: *Settings →
+  Pages → Build and deployment → Source → **GitHub Actions***. Si no está
+  encendido, el flujo falla en `configure-pages` con `Get Pages site failed.
+  Please verify that the repository has Pages enabled and configured to build
+  using GitHub Actions` — el error que se ve en el primer intento, tal cual. No
+  se puede automatizar desde el propio flujo: crear el sitio de Pages por API
+  pide un token con permiso de administración y `GITHUB_TOKEN` no lo tiene, así
+  que el flujo no lleva ninguna llave guardada. Son dos clics, y una vez.
+
 - `actions/configure-pages` resuelve el `base_path` del sitio —`/repo` en un
   sitio de proyecto (`usuario.github.io/repo/`), vacío en uno de usuario— y se
   pasa al build en `PAGES_BASE_PATH`. Se fija **al construir** porque
