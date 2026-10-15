@@ -3,10 +3,27 @@
 import { unzipSync, strFromU8 } from "fflate";
 import { midiToMusicXml } from "./midi-to-musicxml";
 import {
+  boolValue,
+  finiteNumber,
+  isRecord,
+  LAYER_PALETTE,
   makeLayer,
+  sanitizeAnchor,
+  sanitizePoint,
+  textValue,
   uid,
+  wholeNumber,
+  type Anchor,
+  type CommentMessage,
   type Layer,
+  type MeasureFields,
+  type MeasureNote,
+  type Pin,
+  type Priority,
+  type Pt,
   type ScoreDocument,
+  type ScoreMeta,
+  type Stroke,
 } from "./types";
 
 export interface ImportedScore {
@@ -100,7 +117,7 @@ export async function importScoreFile(file: File): Promise<ImportedScore> {
           "meta o xml) o las capas de anotación.",
       );
     }
-    return { doc: normalizeDocument(parsed as Partial<ScoreDocument>), warnings };
+    return { doc: normalizeDocument(parsed), warnings };
   }
 
   if (extension === "mxl") {
@@ -140,16 +157,53 @@ function isScoreDocumentShape(value: unknown): boolean {
 }
 
 /**
+ * Tope de lo que se deja descomprimir de un .mxl, en bytes.
+ *
+ * Un ZIP puede declarar y contener mucho más de lo que pesa (unas pocas decenas
+ * de KB que se expanden a gigabytes): es la bomba de descompresión clásica, y un
+ * archivo de 40 KB bastaba para dejar la pestaña sin memoria antes de decir nada. El
+ * límite de tamaño de la importación no protege de esto —cuenta lo comprimido—,
+ * así que se mira lo que el propio ZIP declara ocupar.
+ */
+const MAX_UNPACKED_BYTES = 64 * 1024 * 1024;
+
+/**
  * Un .mxl es un ZIP con un `META-INF/container.xml` que apunta al MusicXML
  * real. Extraemos ese archivo y guardamos el XML en claro: así el documento
  * es texto plano, se puede versionar y no dependemos de descomprimir al vuelo.
+ *
+ * Se extrae sólo el XML, y con el freno de la bomba de descompresión delante:
+ * el filtro se llama antes de descomprimir cada archivo y, en cuanto la suma de
+ * lo declarado pasa del tope, deja de extraer. Un .mxl suele llevar además la
+ * partitura en PDF y las imágenes de la portada, que no se usan para nada.
  */
 function extractMxl(buffer: ArrayBuffer): string {
+  let declaredBytes = 0;
   let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(new Uint8Array(buffer));
+    files = unzipSync(new Uint8Array(buffer), {
+      filter: (file) => {
+        const isXml =
+          file.name === "META-INF/container.xml" ||
+          (file.name.toLowerCase().endsWith(".xml") && !file.name.startsWith("META-INF/"));
+        // Lo que no se extrae no gasta memoria, así que no cuenta: un .mxl con
+        // la portada escaneada dentro se abre igual. Lo que SÍ se va a
+        // descomprimir se cuenta antes de descomprimirlo, que es lo único que
+        // puede parar a tiempo una bomba.
+        if (!isXml) return false;
+        declaredBytes += file.originalSize ?? file.size ?? 0;
+        return declaredBytes <= MAX_UNPACKED_BYTES;
+      },
+    });
   } catch {
     throw new Error("No se pudo leer el archivo .mxl (ZIP dañado o cifrado).");
+  }
+
+  if (declaredBytes > MAX_UNPACKED_BYTES) {
+    throw new Error(
+      `Ese .mxl se expande a más de ${MAX_UNPACKED_BYTES / 1024 / 1024} MB al descomprimirlo, así que no se ha abierto. ` +
+        "Suele ser un archivo dañado; ábrelo en un editor de partituras y expórtalo otra vez como MusicXML.",
+    );
   }
 
   const container = files["META-INF/container.xml"];
@@ -180,42 +234,257 @@ function withDeclaration(xml: string): string {
     : `<?xml version="1.0" encoding="UTF-8"?>\n${xml}`;
 }
 
-/** Rellena los huecos de un JSON importado de una versión anterior. */
-export function normalizeDocument(input: Partial<ScoreDocument>): ScoreDocument {
+/**
+ * Cómo se completa un documento que llega de fuera.
+ */
+export interface NormalizeOptions {
+  /**
+   * Poner al día `meta.updatedAt`.
+   *
+   * Encendido (el valor por defecto) al importar una copia: abrir tu propia
+   * copia es una decisión tuya, y tiene que ganarle a lo que haya en Drive, que
+   * es exactamente lo que decide `updatedAt` al sincronizar.
+   *
+   * Apagado al bajar algo de Drive: cambiarle la fecha a lo que llega haría que
+   * la próxima sincronización lo devolviera como si fuera nuevo —la copia
+   * recién bajada parecería más reciente que su original— y el conflicto
+   * quedaría al revés.
+   */
+  touch?: boolean;
+}
+
+/**
+ * Un identificador único dentro de su colección.
+ *
+ * Un documento editado a mano puede traer dos capas con el mismo id (o dos
+ * trazos): y entonces borrar uno borraría los dos, y mover una capa movería la
+ * otra. Al segundo se le da un id nuevo.
+ */
+function pickId(candidate: unknown, used: Set<string>, prefix: string): string {
+  let id = typeof candidate === "string" && candidate ? candidate : uid(prefix);
+  if (used.has(id)) id = uid(prefix);
+  used.add(id);
+  return id;
+}
+
+function sanitizeMessage(value: unknown, used: Set<string>, now: number): CommentMessage | null {
+  if (!isRecord(value)) return null;
+  return {
+    id: pickId(value.id, used, "msg"),
+    text: textValue(value.text),
+    tag: textValue(value.tag, "nota"),
+    createdAt: finiteNumber(value.createdAt, now),
+  };
+}
+
+function sanitizeStroke(value: unknown, used: Set<string>, now: number): Stroke | null {
+  if (!isRecord(value)) return null;
+  const points = (Array.isArray(value.points) ? value.points : [])
+    .map(sanitizePoint)
+    .filter((point): point is Pt => point !== null);
+  const rawAnchors = Array.isArray(value.anchors) ? value.anchors : [];
+  const anchors = rawAnchors
+    .map(sanitizeAnchor)
+    .filter((anchor): anchor is Anchor => anchor !== null);
+  // Sin puntos ni anclas no hay nada que dibujar: no es un trazo, es un
+  // registro roto, y enseñarlo sería enseñar tinta que no existe.
+  if (points.length === 0 && anchors.length === 0) return null;
+  return {
+    id: pickId(value.id, used, "stroke"),
+    points,
+    // O están TODAS las anclas, o no hay ninguna: media ancla es peor que
+    // ninguna, porque coloca el trazo a medias y ya no se recalcula (ver
+    // `lib/anchors.ts`). Sin anclas, la primera maquetación las calcula.
+    anchors: anchors.length === rawAnchors.length ? anchors : undefined,
+    color: typeof value.color === "string" ? value.color : null,
+    width: Math.max(0.1, finiteNumber(value.width, 2.4)),
+    opacity: Math.min(1, Math.max(0, finiteNumber(value.opacity, 1))),
+    tool: value.tool === "highlighter" ? "highlighter" : "pencil",
+    createdAt: finiteNumber(value.createdAt, now),
+  };
+}
+
+function sanitizePin(value: unknown, used: Set<string>, now: number): Pin | null {
+  if (!isRecord(value)) return null;
+  // Un comentario sin sitio en el papel no se puede colocar en ningún lado.
+  if (typeof value.x !== "number" || !Number.isFinite(value.x)) return null;
+  if (typeof value.y !== "number" || !Number.isFinite(value.y)) return null;
+  return {
+    id: pickId(value.id, used, "pin"),
+    x: value.x,
+    y: value.y,
+    measureIndex: wholeNumber(value.measureIndex),
+    anchor: sanitizeAnchor(value.anchor) ?? undefined,
+    messages: (Array.isArray(value.messages) ? value.messages : [])
+      .map((message) => sanitizeMessage(message, used, now))
+      .filter((message): message is CommentMessage => message !== null),
+    resolved: boolValue(value.resolved, false),
+    createdAt: finiteNumber(value.createdAt, now),
+  };
+}
+
+/**
+ * Campos estructurados de una nota.
+ *
+ * Se construyen campo a campo y no esparciendo lo que venga: es la diferencia
+ * entre un documento antiguo sin `fields` —que hacía `note.fields.text` y
+ * tumbaba el panel entero— y uno que abre con todo en blanco. Tampoco pasan los
+ * campos de más: un `fields` con veinte claves ajenas se guardaría tal cual y
+ * viajaría en cada copia y en cada sincronización.
+ */
+function sanitizeFields(value: unknown): MeasureFields {
+  const source = isRecord(value) ? value : {};
+  return {
+    text: textValue(source.text),
+    dynamics: textValue(source.dynamics),
+    articulation: textValue(source.articulation),
+    fingering: textValue(source.fingering),
+    technique: textValue(source.technique),
+    harmony: textValue(source.harmony),
+  };
+}
+
+function sanitizeNote(value: unknown, used: Set<string>, now: number): MeasureNote | null {
+  if (!isRecord(value)) return null;
+  // El compás ES la identidad de una nota de pasaje: sin uno válido no hay
+  // dónde ponerla ni a qué compás apuntarla.
+  const from = wholeNumber(value.measureIndex);
+  if (from === null) return null;
+  const to = wholeNumber(value.measureEnd) ?? from;
+  const priority = wholeNumber(value.priority);
+  return {
+    id: pickId(value.id, used, "note"),
+    measureIndex: from,
+    measureEnd: to,
+    measureNumber: textValue(value.measureNumber, String(from + 1)),
+    partId: typeof value.partId === "string" && value.partId ? value.partId : null,
+    fields: sanitizeFields(value.fields),
+    priority: (priority !== null && priority <= 3 ? priority : 0) as Priority,
+    tags: (Array.isArray(value.tags) ? value.tags : []).filter(
+      (tag): tag is string => typeof tag === "string" && tag.trim() !== "",
+    ),
+    updatedAt: finiteNumber(value.updatedAt, now),
+  };
+}
+
+function sanitizeLayer(
+  value: unknown,
+  used: Set<string>,
+  now: number,
+  index: number,
+): Layer | null {
+  if (!isRecord(value)) return null;
+  return {
+    id: pickId(value.id, used, "layer"),
+    name: textValue(value.name, `Capa ${index + 1}`),
+    color:
+      typeof value.color === "string" && value.color
+        ? value.color
+        : LAYER_PALETTE[index % LAYER_PALETTE.length],
+    visible: boolValue(value.visible, true),
+    locked: boolValue(value.locked, false),
+    opacity: Math.min(1, Math.max(0.05, finiteNumber(value.opacity, 1))),
+    strokes: (Array.isArray(value.strokes) ? value.strokes : [])
+      .map((stroke) => sanitizeStroke(stroke, used, now))
+      .filter((stroke): stroke is Stroke => stroke !== null),
+    pins: (Array.isArray(value.pins) ? value.pins : [])
+      .map((pin) => sanitizePin(pin, used, now))
+      .filter((pin): pin is Pin => pin !== null),
+    notes: (Array.isArray(value.notes) ? value.notes : [])
+      .map((note) => sanitizeNote(note, used, now))
+      .filter((note): note is MeasureNote => note !== null),
+  };
+}
+
+/** Origen legible del documento: lo que no se reconoce es MusicXML. */
+function sanitizeSource(value: unknown): ScoreMeta["source"] {
+  return value === "demo" || value === "mxl" || value === "midi" ? value : "musicxml";
+}
+
+/**
+ * Lecturas por parte, una a una.
+ *
+ * Se construye un objeto NUEVO con lo que se puede leer y se descarta el resto:
+ * el que llega puede traer `__proto__` (que escrito con corchetes toca el
+ * prototipo) o valores que no son números, y de aquí sale el tono con el que se
+ * dibuja cada instrumento.
+ */
+function sanitizePartTransposes(value: unknown): Record<string, number> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: Record<string, number> = {};
+  let any = false;
+  for (const [partId, semitones] of Object.entries(value)) {
+    if (!partId || partId === "__proto__") continue;
+    if (typeof semitones !== "number" || !Number.isFinite(semitones)) continue;
+    out[partId] = semitones;
+    any = true;
+  }
+  return any ? out : undefined;
+}
+
+/**
+ * Rellena los huecos de un documento que no ha escrito esta aplicación, y
+ * sustituye lo que no se puede leer por un valor neutro.
+ *
+ * Es la única puerta de entrada de datos ajenos: la usa la importación de un
+ * `.json` y la sincronización con Drive, porque los dos llegan de fuera y los
+ * dos acaban en un documento que se dibuja y se edita. Antes de esto sólo se
+ * completaban tres campos, así que una copia antigua sin `fields` en una nota
+ * —o una capa sin la lista de comentarios— abría y reventaba al llegar al
+ * panel. Ver `tests/files.test.mjs`.
+ */
+export function normalizeDocument(input: unknown, options: NormalizeOptions = {}): ScoreDocument {
   const now = Date.now();
-  const layers: Layer[] = (input.layers ?? []).map((l) => ({
-    id: l.id ?? uid("layer"),
-    name: l.name ?? "Capa",
-    color: l.color ?? "#1f6feb",
-    visible: l.visible ?? true,
-    locked: l.locked ?? false,
-    opacity: typeof l.opacity === "number" ? l.opacity : 1,
-    strokes: l.strokes ?? [],
-    pins: l.pins ?? [],
-    // Los documentos guardados antes de que existieran los tramos y las partes
-    // no traen `measureEnd` ni `partId`: se completan aquí, y un tramo sin
-    // final es un solo compás.
-    notes: (l.notes ?? []).map((n) => ({
-      ...n,
-      measureEnd: n.measureEnd ?? n.measureIndex,
-      partId: n.partId ?? null,
-    })),
-  }));
+  const touch = options.touch ?? true;
+  const source = isRecord(input) ? input : {};
+  const meta = isRecord(source.meta) ? source.meta : {};
+
+  const usedIds = new Set<string>();
+  const layers = (Array.isArray(source.layers) ? source.layers : [])
+    .map((layer, index) => sanitizeLayer(layer, usedIds, now, index))
+    .filter((layer): layer is Layer => layer !== null);
+  // Un documento sin capas no tiene dónde anotar: se le pone una. No hay
+  // ninguno legítimo en esta forma -hasta la versión más antigua traía una-
+  // así que esto es el suelo, no el caso normal.
   if (layers.length === 0) layers.push(makeLayer("Mis anotaciones", 0));
+
+  const wantedActive = textValue(source.activeLayerId);
 
   return {
     meta: {
-      id: input.meta?.id ?? uid("score"),
-      title: input.meta?.title ?? "Sin título",
-      composer: input.meta?.composer ?? "",
-      instrumentation: input.meta?.instrumentation ?? "",
-      source: input.meta?.source ?? "musicxml",
-      createdAt: input.meta?.createdAt ?? now,
-      updatedAt: now,
+      id: textValue(meta.id) || uid("score"),
+      title: textValue(meta.title, "Sin título"),
+      composer: textValue(meta.composer),
+      instrumentation: textValue(meta.instrumentation),
+      source: sanitizeSource(meta.source),
+      // Estas tres no son adorno: las dos últimas son el transporte (el de la
+      // obra y el de cada instrumento) y `layoutWidth` es el ancho del papel,
+      // que hoy es una constante de la aplicación y por eso casi ningún
+      // documento lo trae; si viene, manda. Al reconstruir los metadatos campo a
+      // campo, la que no se copie aquí desaparece sin avisar al abrir una copia
+      // exportada.
+      layoutWidth:
+        typeof meta.layoutWidth === "number" &&
+        Number.isFinite(meta.layoutWidth) &&
+        meta.layoutWidth > 0
+          ? meta.layoutWidth
+          : undefined,
+      transpose:
+        typeof meta.transpose === "number" && Number.isFinite(meta.transpose)
+          ? meta.transpose
+          : undefined,
+      partTransposes: sanitizePartTransposes(meta.partTransposes),
+      createdAt: finiteNumber(meta.createdAt, now),
+      updatedAt: touch ? now : finiteNumber(meta.updatedAt, now),
     },
-    xml: input.xml ?? "",
+    xml: textValue(source.xml),
     layers,
-    activeLayerId: input.activeLayerId ?? layers[0].id,
+    // La capa activa tiene que existir: si el id guardado no está (un documento
+    // reconstruido, una capa borrada a mano), editar no haría nada y parecería
+    // que el lápiz se ha roto.
+    activeLayerId: layers.some((layer) => layer.id === wantedActive)
+      ? wantedActive
+      : layers[0].id,
   };
 }
 

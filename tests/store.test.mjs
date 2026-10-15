@@ -190,3 +190,110 @@ test("una capa bloqueada no se mueve, no se borra y no recibe trazos", () => {
 
   restore(original);
 });
+
+/**
+ * Una petición de guardado que llega mientras se está escribiendo NO se puede
+ * perder.
+ *
+ * El autoguardado es un temporizador: si escribe y, mientras la escritura está
+ * en el aire, otro cambio pide guardar, el temporizador de ese segundo cambio ya
+ * se ha consumido. Antes, `saveNow` se apartaba sin más cuando ya había una
+ * escritura en curso, así que ese cambio se quedaba sin escribir hasta el
+ * siguiente cambio (puede que ninguno) o hasta cerrar la pestaña, que es cuando
+ * más caro sale perderlo.
+ *
+ * En Node no hay IndexedDB, así que la escritura acaba en `saveError` —que es
+ * también lo que se comprueba: un fallo de guardado se dice y NO apaga el aviso
+ * de «hay cambios sin guardar»—. Lo que importa de la prueba es la cola.
+ */
+test("un guardado que llega mientras se escribe se vuelve a poner en cola", async () => {
+  const doc = makeDoc();
+  const original = useStore.getState().saveNow;
+  useStore.setState({
+    doc,
+    activeLayerId: doc.activeLayerId,
+    pendingSave: false,
+    saving: false,
+    saveError: "",
+  });
+
+  const first = useStore.getState().saveNow();
+  assert.equal(useStore.getState().saving, true, "la primera escritura arranca");
+
+  // Esta es la que antes desaparecía sin dejar rastro.
+  void useStore.getState().saveNow();
+  assert.equal(
+    useStore.getState().pendingSave,
+    true,
+    "el cambio tiene que quedar apuntado para volver a intentarlo",
+  );
+
+  await first;
+  const state = useStore.getState();
+  assert.equal(state.saving, false);
+  // El fallo se cuenta, y el aviso de «sin guardar» sigue en pie: hay trabajo
+  // que no ha llegado al disco.
+  assert.match(state.saveError, /no se han podido guardar|exporta el \.json/i);
+  assert.equal(state.pendingSave, true);
+
+  restore(original);
+});
+
+/** Partitura mínima medida: un compás, un pentagrama del saxo. */
+function makeExtent() {
+  return {
+    boxes: [{ measureIndex: 0, measureNumber: "1", x: 0, y: 0, width: 100, height: 30 }],
+    staffBoxes: [
+      { measureIndex: 0, staffIndex: 0, partId: "P1", x: 0, y: 0, width: 100, height: 30 },
+    ],
+    parts: [{ id: "P1", name: "Saxo", abbreviation: "", staffIndices: [0] }],
+    width: 100,
+    height: 30,
+  };
+}
+
+test("un trazo nuevo se guarda anclado, no en píxeles absolutos", () => {
+  const doc = makeDoc();
+  const original = withDoc(doc);
+  useStore.setState({ extent: makeExtent() });
+
+  useStore
+    .getState()
+    .commitStroke({ ...makeStroke("stroke_1"), points: [{ x: 50, y: 15, p: 0.5 }] });
+
+  const stroke = useStore.getState().doc.layers[0].strokes[0];
+  assert.deepEqual(stroke.anchors, [{ m: 0, p: "P1", o: 0, u: 0.5, v: 0.5 }]);
+
+  restore(original);
+});
+
+test("un documento anterior al anclaje se normaliza, y normalizar no es una edición", () => {
+  const layer = makeLayer("Mis anotaciones", 0);
+  layer.strokes = [makeStroke("stroke_legacy")];
+  layer.pins = [makePin("pin_legacy")];
+  const original = withDoc(makeDoc([layer]));
+  useStore.setState({ extent: makeExtent(), past: [], future: [] });
+
+  // Llegó de una versión sin anclas.
+  assert.equal(useStore.getState().doc.layers[0].strokes[0].anchors, undefined);
+
+  useStore.getState().reanchor();
+
+  const stroke = useStore.getState().doc.layers[0].strokes[0];
+  assert.equal(stroke.anchors.length, 2, "un ancla por punto");
+  assert.equal(stroke.anchors[0].m, 0);
+  assert.equal(stroke.anchors[0].p, "P1");
+  const pin = useStore.getState().doc.layers[0].pins[0];
+  assert.ok(pin.anchor, "los comentarios también se anclan");
+
+  // Es una normalización del formato, no una edición de nadie: si entrara en el
+  // historial, la primera pulsación de «deshacer» no desharía nada tuyo.
+  assert.equal(useStore.getState().past.length, 0);
+
+  // Con la partitura ya anclada no se reescribe nada: ni copias ni avisos.
+  const before = useStore.getState().doc.layers[0].strokes[0];
+  useStore.getState().reanchor();
+  assert.equal(useStore.getState().doc.layers[0].strokes[0], before);
+
+  restore(original);
+});

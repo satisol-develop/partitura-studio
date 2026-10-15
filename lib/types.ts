@@ -19,6 +19,34 @@ export interface Pt {
   p: number;
 }
 
+/**
+ * Ancla de una anotación: el compás sobre el que vive y su sitio dentro de la
+ * caja de ese compás (o de uno de sus pentagramas).
+ *
+ * Sustituye a las coordenadas absolutas como fuente de verdad. Los píxeles se
+ * vuelven a calcular al pintar, así que transponer la obra u ocultar una parte
+ * mueve la música sin despegar la tinta. Ver `lib/anchors.ts`.
+ */
+export interface Anchor {
+  /** `measureListIndex` del compás de referencia. */
+  m: number;
+  /**
+   * Parte (instrumento) sobre la que vive, o null si el punto cae fuera de
+   * todos los pentagramas y se ancla al compás entero.
+   *
+   * La parte, y no el índice de pentagrama: al ocultar un instrumento los
+   * índices se renumeran, y con el índice la anotación saltaría a otro
+   * pentagrama. Con la parte, sigue siendo de quien era.
+   */
+  p: string | null;
+  /** Ordinal del pentagrama dentro de su parte (0 para un instrumento de uno). */
+  o: number;
+  /** Posición relativa a la caja (1 = borde derecho). Puede salirse de [0,1]. */
+  u: number;
+  /** Posición relativa a la caja (1 = borde inferior). Puede salirse de [0,1]. */
+  v: number;
+}
+
 export type ToolId =
   | "select"
   | "pencil"
@@ -29,8 +57,19 @@ export type ToolId =
 
 export interface Stroke {
   id: string;
-  /** Puntos en espacio de partitura. */
+  /**
+   * Puntos en espacio de partitura. Es la posición de la ÚLTIMA maquetación,
+   * no la verdad: al pintar se recalculan desde `anchors`. Se conservan para no
+   * romper los documentos antiguos ni el formato guardado.
+   */
   points: Pt[];
+  /**
+   * Dónde vive el trazo, compás a compás. Los documentos antiguos no lo traen:
+   * al abrirlos se calcula con la maquetación actual, que es la misma en la que
+   * se dibujó porque el ancho del papel es una constante de la aplicación (ver
+   * `meta.layoutWidth`). Sin este campo, un trazo se coloca por sus píxeles.
+   */
+  anchors?: Anchor[];
   /** Color en hex; si es null hereda el de la capa. */
   color: string | null;
   /** Ancho base en espacio de partitura. */
@@ -50,10 +89,13 @@ export interface CommentMessage {
 
 export interface Pin {
   id: string;
+  /** Posición de la última maquetación; se recalcula desde `anchor`. */
   x: number;
   y: number;
   /** Compás sobre el que cae, resuelto al crearlo (measureListIndex). */
   measureIndex: number | null;
+  /** Dónde vive el comentario. Los documentos antiguos no lo traen. */
+  anchor?: Anchor;
   messages: CommentMessage[];
   resolved: boolean;
   createdAt: number;
@@ -174,6 +216,21 @@ export interface ScoreMeta {
    * guardadas en coordenadas absolutas.
    */
   layoutWidth?: number;
+  /**
+   * Transporte de la obra entera, en semitonos.
+   *
+   * Esto sí es música: la pieza pasa a estar en otro tono, así que cambia lo
+   * que se lee **y** lo que suena.
+   */
+  transpose?: number;
+  /**
+   * Transposición de cada instrumento, por id de parte: los semitonos que hay
+   * que sumar a lo que suena para escribir lo que ese instrumento lee.
+   *
+   * Sólo cambia el papel, nunca el sonido: si el saxo alto lee en Mi♭, el piano
+   * sigue oyéndose en el mismo tono. Ver `lib/transpose.ts`.
+   */
+  partTransposes?: Record<string, number>;
   createdAt: number;
   updatedAt: number;
 }
@@ -265,3 +322,90 @@ export function countAnnotations(layers: Layer[]): number {
     0,
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Saneado de lo que llega de fuera                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Lo que construye un documento que no ha escrito esta aplicación.
+ *
+ * Una partitura puede llegar de tres sitios y en los tres el dato es ajeno:
+ * un `.json` exportado por una versión anterior, un archivo que alguien ha
+ * editado a mano, y lo que devuelve Drive —donde hay lo que subiera cualquier
+ * equipo con la misma cuenta—. Los tres caminos acaban en el mismo sitio: en
+ * un documento que se dibuja, se cuenta y se edita dando por hechos campos que
+ * puede que no estén.
+ *
+ * `normalizeDocument` (`lib/files.ts`) es quien rellena los huecos, y lo hace
+ * con estas piezas. La regla es siempre la misma: un valor que no se puede
+ * leer se sustituye por el valor neutro —sin lanzar, sin adivinar— y una
+ * anotación que no puede existir sin él (un trazo sin puntos ni anclas, una
+ * nota sin compás) se descarta. Descartar es lo honesto: es mejor perder un
+ * dato que no se puede interpretar que enseñar una partitura que se rompe al
+ * abrirla.
+ *
+ * Viven aquí, en el modelo, porque no dependen de nadie: cualquier capa de la
+ * aplicación que reciba datos de fuera tiene que poder usarlas.
+ */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Número finito, o el valor por defecto. `NaN` y `Infinity` no son coordenadas. */
+export function finiteNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/** Entero mayor o igual que cero, o `null` si no lo es. */
+export function wholeNumber(value: unknown, minimum = 0): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum) return null;
+  return value;
+}
+
+export function textValue(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+export function boolValue(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+/**
+ * Ancla legible, o `null`.
+ *
+ * Un ancla es lo que decide dónde cae una anotación cuando la partitura se
+ * vuelve a maquetar o se transpone, así que un ancla a medias (con `NaN`, con
+ * un compás negativo, con la parte como número) no se arregla sola: o está
+ * entera, o se trata como si la anotación no tuviera ancla y se recalcula con
+ * la maquetación actual.
+ */
+export function sanitizeAnchor(value: unknown): Anchor | null {
+  if (!isRecord(value)) return null;
+  const measure = wholeNumber(value.m);
+  if (measure === null) return null;
+  if (typeof value.u !== "number" || !Number.isFinite(value.u)) return null;
+  if (typeof value.v !== "number" || !Number.isFinite(value.v)) return null;
+  return {
+    m: measure,
+    p: typeof value.p === "string" && value.p ? value.p : null,
+    o: wholeNumber(value.o) ?? 0,
+    u: value.u,
+    v: value.v,
+  };
+}
+
+/** Punto de un trazo: sin coordenadas no hay punto que dibujar. */
+export function sanitizePoint(value: unknown): Pt | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.x !== "number" || !Number.isFinite(value.x)) return null;
+  if (typeof value.y !== "number" || !Number.isFinite(value.y)) return null;
+  return {
+    x: value.x,
+    y: value.y,
+    // La presión se acota: un 40 en el campo daría un trazo de 40 veces su
+    // grosor, que no es un trazo, es un borrón.
+    p: Math.min(1, Math.max(0, finiteNumber(value.p, 0.5))),
+  };
+}
+

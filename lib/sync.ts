@@ -32,6 +32,8 @@ import {
   putRemoteScore,
   type DriveConfig,
 } from "./drive";
+import { normalizeDocument } from "./files";
+import { finiteNumber, isRecord, textValue } from "./types";
 import type { ScoreDocument, ScoreSummary } from "./types";
 
 /** Lo que el motor necesita del almacén local. Lo cumple `lib/persistence.ts`. */
@@ -92,6 +94,48 @@ export interface SyncOptions {
 }
 
 export const SYNC_STATE_KEY = "ps:drive:state";
+/**
+ * Correo de la cuenta con la que este equipo sincronizó por última vez.
+ *
+ * Hace falta porque la biblioteca local es del EQUIPO, no de la sesión: si en
+ * este navegador trabaja más de una persona (un ordenador de aula, un portátil
+ * compartido), lo que hay guardado es de quien lo dibujó, y subirlo a la cuenta
+ * de quien entre después son las partituras de otra persona en su Drive. Ver
+ * `needsOwnerConfirmation`.
+ */
+export const SYNC_OWNER_KEY = "ps:drive:owner";
+
+export function loadSyncOwner(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(SYNC_OWNER_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveSyncOwner(email: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SYNC_OWNER_KEY, email);
+  } catch {
+    // Sin poder recordarlo se preguntará otra vez: preguntar de más es mucho
+    // mejor que subir a ciegas la biblioteca de otra persona.
+  }
+}
+
+/**
+ * ¿Hay que pedir permiso antes de subir la biblioteca de este equipo a la
+ * cuenta que acaba de entrar?
+ *
+ * Sólo cuando consta con qué cuenta se sincronizó antes y es OTRA. En una
+ * instalación nueva —sin dueño apuntado— no se pregunta nada: quien entra por
+ * primera vez espera ver sus partituras, no un aviso. Y sin correo (sin sesión)
+ * tampoco hay nada que decidir: no se sincroniza.
+ */
+export function needsOwnerConfirmation(owner: string, email: string): boolean {
+  return Boolean(owner) && Boolean(email) && owner !== email;
+}
 
 export function loadSyncState(): SyncState {
   if (typeof window === "undefined") return EMPTY_SYNC_STATE;
@@ -200,7 +244,7 @@ export async function syncWithDrive(
       }
 
       if (!localSummary && remoteSummary) {
-        await download(id, local, config, next, report, fetchImpl);
+        await download(id, local, config, next, report, remoteSummary.updatedAt, fetchImpl);
         continue;
       }
 
@@ -230,7 +274,7 @@ export async function syncWithDrive(
       }
 
       if (remoteWins) {
-        await download(id, local, config, next, report, fetchImpl);
+        await download(id, local, config, next, report, remoteSummary.updatedAt, fetchImpl);
       } else {
         await upload(id, local, config, next, report, remoteById, fetchImpl);
       }
@@ -265,16 +309,37 @@ async function download(
   config: DriveConfig,
   state: SyncState,
   report: SyncReport,
+  /** `updatedAt` que el índice de Drive da a esta partitura. */
+  remoteUpdatedAt: number,
   fetchImpl?: typeof fetch,
 ) {
   const remote = await getRemoteScore(config, id, { fetchImpl });
   if (!remote) throw new Error("Drive dice que existe pero ya no está.");
-  const doc: ScoreDocument = {
-    ...remote.document,
-    // El MusicXML vive en su propio archivo dentro de la carpeta; se recupera
-    // tal cual para que la partitura se pueda volver a dibujar en este equipo.
-    xml: remote.xml || remote.document.xml || "",
-  };
+  // Lo que llega por la red se sanea ANTES de guardarse, no al abrirlo: puede
+  // ser un documento escrito por una versión anterior (sin `fields` en las
+  // notas, sin la lista de comentarios) o uno que alguien ha tocado desde
+  // Drive, y en cuanto se guarda así la aplicación lo abre, lo dibuja y revienta
+  // en el panel. Se arregla una vez, en el único sitio por donde entra Drive.
+  const incoming: Record<string, unknown> = isRecord(remote.document)
+    ? remote.document
+    : {};
+  const incomingMeta = isRecord(incoming.meta) ? incoming.meta : {};
+  const doc = normalizeDocument(
+    {
+      ...incoming,
+      // El MusicXML vive en su propio archivo dentro de la carpeta; se recupera
+      // tal cual para que la partitura se pueda volver a dibujar en este equipo.
+      xml: remote.xml || textValue(incoming.xml),
+      // La fecha sale del documento y, si no la trae, del índice: sin fecha
+      // propia, la copia recién bajada parecería más nueva que su original y la
+      // siguiente pasada la volvería a subir.
+      meta: {
+        ...incomingMeta,
+        updatedAt: finiteNumber(incomingMeta.updatedAt, remoteUpdatedAt),
+      },
+    },
+    { touch: false },
+  );
   await local.save(doc);
   state.synced[id] = doc.meta.updatedAt;
   report.downloaded.push(id);

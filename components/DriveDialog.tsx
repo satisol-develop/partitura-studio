@@ -165,7 +165,9 @@ function DriveDialogBody() {
                   Probar conexión
                 </button>
                 <button
-                  onClick={() => void syncNow()}
+                  // `force`: es el botón, y pulsarlo es la confirmación explícita
+                  // de subir a esta cuenta la biblioteca que hay en el equipo.
+                  onClick={() => void syncNow({ force: true })}
                   disabled={status === "working"}
                   className="flex items-center gap-1.5 rounded-lg bg-gradient-to-b from-ink to-ink-soft px-3 py-1.5 text-xs font-semibold text-white shadow-[0_8px_18px_-12px_rgba(28,27,25,0.9)] transition-all disabled:opacity-40 disabled:shadow-none"
                 >

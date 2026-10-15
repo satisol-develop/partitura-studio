@@ -96,6 +96,19 @@ var MAX_ATTEMPTS = 8;
 var LOCKOUT_SECONDS = 15 * 60;
 /** Tope de usuarios que se pueden comprobar sin sospechar de una lista enorme. */
 var MAX_USERS = 500;
+/**
+ * Tope del documento serializado y del MusicXML, en caracteres.
+ *
+ * No es un capricho: una petición que no cabe la corta Google antes de llegar
+ * aquí, y el cliente recibe un error de red indistinguible de «no hay wifi». Con
+ * esto, en cambio, se responde con un motivo en castellano. Los 20 MB están por
+ * encima de lo que puede producir la aplicación (que no deja importar nada de
+ * más de 25 MB, y el XML viaja una sola vez) y por debajo del límite de Apps
+ * Script. Se cuentan caracteres, que en JSON son bytes salvo en lo que no es
+ * ASCII: sobra margen.
+ */
+var MAX_DOCUMENT_CHARS = 20 * 1024 * 1024;
+var MAX_XML_CHARS = 20 * 1024 * 1024;
 
 /* ------------------------------------------------------------------------- */
 /* Puntos de entrada                                                          */
@@ -159,7 +172,12 @@ function doPost(e) {
         return json(fail("Acción desconocida: " + request.action, "bad_request"));
     }
   } catch (error) {
-    return json(fail(String(error.message || error), "server_error"));
+    // No todo lo que salta por aquí es culpa del servidor. Un id imposible o un
+    // dato que falta los ha mandado el cliente, y decirlos como «server_error»
+    // manda a mirar el registro de ejecuciones para nada: el cliente decide
+    // cosas distintas con un error de petición que con uno del servidor.
+    var code = error && error.code === "bad_request" ? "bad_request" : "server_error";
+    return json(fail(String(error.message || error), code));
   }
 }
 
@@ -321,6 +339,37 @@ function handlePut(request) {
   if (!document || typeof document !== "object") {
     return fail("Falta el documento de anotaciones.", "bad_request");
   }
+  // Se comprueba la forma antes de escribir nada: lo que entra aquí acaba siendo
+  // el `document.json` de una carpeta y el resumen del índice, y un documento
+  // sin `meta` o sin `layers` (una petición hecha a mano, un cliente antiguo)
+  // dejaría una partitura que la aplicación baja y no puede dibujar.
+  if (typeof document.meta !== "object" || document.meta === null) {
+    return fail("El documento no trae sus metadatos (meta).", "bad_request");
+  }
+  if (Object.prototype.toString.call(document.layers) !== "[object Array]") {
+    return fail("El documento no trae sus capas de anotación (layers).", "bad_request");
+  }
+  // El id manda el nombre de la carpeta, así que el documento tiene que decir lo
+  // mismo: si no, el índice guardaría la partitura bajo una clave que su propio
+  // documento desmiente y el siguiente `get` devolvería algo que la aplicación
+  // volvería a bajar con otro id (y a subir, y a bajar). Se corrige aquí, que es
+  // el único sitio que escribe.
+  document.meta.id = id;
+
+  var xml = typeof request.xml === "string" ? request.xml : "";
+  if (xml.length > MAX_XML_CHARS) {
+    return fail(
+      "El MusicXML de esa partitura es demasiado grande para esta instalación.",
+      "bad_request",
+    );
+  }
+  var serialized = JSON.stringify(document);
+  if (serialized === null || serialized.length > MAX_DOCUMENT_CHARS) {
+    return fail(
+      "El documento de anotaciones es demasiado grande para esta instalación.",
+      "bad_request",
+    );
+  }
 
   var lock = LockService.getScriptLock();
   // Sin el cerrojo, dos guardados a la vez (dos pestañas, o el autoguardado y
@@ -330,9 +379,9 @@ function handlePut(request) {
     var root = getRootFolder();
     var scores = getOrCreateFolder(root, "scores");
     var folder = getOrCreateFolder(scores, id);
-    writeFile(folder, "document.json", JSON.stringify(document), "application/json");
-    if (typeof request.xml === "string" && request.xml.length > 0) {
-      writeFile(folder, "score.musicxml", request.xml, "application/xml");
+    writeFile(folder, "document.json", serialized, "application/json");
+    if (xml.length > 0) {
+      writeFile(folder, "score.musicxml", xml, "application/xml");
     }
     var summary = summarize(id, document);
     updateIndex(function (index) {
@@ -369,7 +418,13 @@ function handleDelete(request) {
 function readIndex() {
   var file = findFile(getRootFolder(), "library.json");
   var parsed = file ? parseJson(file.getBlob().getDataAsString()) : null;
-  if (!parsed || !parsed.scores) return { version: INDEX_VERSION, scores: [] };
+  // `scores` tiene que ser una lista: si el archivo se quedó a medias al
+  // escribirse, o alguien lo ha editado desde Drive, esto es lo que evita que
+  // `list` devuelva algo que el cliente no sabe leer (y que la escritura
+  // siguiente del índice arrastre el destrozo).
+  if (!parsed || Object.prototype.toString.call(parsed.scores) !== "[object Array]") {
+    return { version: INDEX_VERSION, scores: [] };
+  }
   return parsed;
 }
 
@@ -649,7 +704,9 @@ function requireId(request) {
   // El id viene del nombre de una carpeta de Drive: se restringe a caracteres
   // seguros para no poder salirse de `scores/` con «..» o «/».
   if (!/^[A-Za-z0-9_-]{3,120}$/.test(id)) {
-    throw new Error("El identificador de la partitura no es válido.");
+    var error = new Error("El identificador de la partitura no es válido.");
+    error.code = "bad_request";
+    throw error;
   }
   return id;
 }

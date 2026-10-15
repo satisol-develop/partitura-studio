@@ -6,6 +6,7 @@ import {
   makeLayer,
   noteRange,
   uid,
+  type Anchor,
   type Layer,
   type MeasureFields,
   type MeasureNote,
@@ -19,6 +20,7 @@ import {
   type ToolId,
 } from "./types";
 import {
+  countStoredScores,
   deleteScore,
   listScores,
   loadScore,
@@ -26,6 +28,16 @@ import {
   repairIndex,
   saveScore,
 } from "./persistence";
+import {
+  anchorForPin,
+  anchorOf,
+  anchorsFor,
+  needsAnchoring,
+  pinBelongsToPart,
+  strokeBelongsToPart,
+} from "./anchors";
+import { EMPTY_EXTENT, type ScoreExtent } from "./geometry";
+import { adoptReadings } from "./transpose";
 import type { PlaybackTimeline } from "./playback";
 import { DriveError, listRemote, testConnection } from "./drive";
 import {
@@ -41,8 +53,11 @@ import {
 } from "./auth";
 import {
   describeReport,
+  loadSyncOwner,
   loadSyncState,
   markDeleted,
+  needsOwnerConfirmation,
+  saveSyncOwner,
   saveSyncState,
   syncWithDrive,
   type SyncState,
@@ -146,7 +161,13 @@ interface StoreState {
   setDrivePanelOpen: (open: boolean) => void;
   setAutoSync: (on: boolean) => void;
   testDrive: () => Promise<void>;
-  syncNow: () => Promise<void>;
+  /**
+   * Sincroniza. `force` es la confirmación explícita de quien pulsa el botón:
+   * hace falta cuando este equipo sincronizó antes con OTRA cuenta, porque
+   * subir aquí la biblioteca local subiría el trabajo de otra persona a tu
+   * Drive. Sin `force`, en ese caso no se sincroniza y se explica por qué.
+   */
+  syncNow: (options?: { force?: boolean }) => Promise<void>;
 
   /** Entra con correo y contraseña (el backend decide si puede). */
   signIn: (email: string, password: string) => Promise<boolean>;
@@ -183,6 +204,8 @@ interface StoreState {
     measureIndex: number | null;
     text: string;
     tag: string;
+    /** Ancla explícita; si no se pasa, se calcula con la maquetación actual. */
+    anchor?: Anchor | null;
   }) => string | null;
   addPinMessage: (pinId: string, text: string, tag: string) => void;
   togglePinResolved: (pinId: string) => void;
@@ -192,7 +215,13 @@ interface StoreState {
    * arrastrado a otro compás tiene que quedar anotado en el compás al que ha
    * ido a parar y no en el que estaba; `null` significa «fuera de la música».
    */
-  movePin: (pinId: string, x: number, y: number, measureIndex?: number | null) => void;
+  movePin: (
+    pinId: string,
+    x: number,
+    y: number,
+    measureIndex?: number | null,
+    anchor?: Anchor | null,
+  ) => void;
 
   upsertMeasureNote: (
     target: { from: number; to: number; label: string; partId: string | null },
@@ -200,9 +229,53 @@ interface StoreState {
   ) => void;
   removeMeasureNoteRange: (from: number, to: number, partId: string | null) => void;
 
+  /**
+   * Extensión medida de la partitura abierta. La fija el lienzo después de
+   * dibujarla.
+   *
+   * Vive aquí, y no sólo en el lienzo, para que las anotaciones se anelen al
+   * crearse sin que cada punto de llamada tenga que acordarse de hacerlo: el
+   * invariante se cumple en el almacén o no se cumple.
+   */
+  extent: ScoreExtent;
+  setExtent: (extent: ScoreExtent) => void;
+  /**
+   * Pone ancla a las anotaciones que no la tengan (documentos anteriores a que
+   * existiera el anclaje). No pasa por el historial: normalizar el formato no
+   * es una edición tuya y no debe aparecer en «deshacer».
+   */
+  reanchor: () => void;
+
   setParts: (parts: PartInfo[]) => void;
   setMeasureNumbers: (numbers: string[]) => void;
   setTargetPartId: (partId: string | null) => void;
+  /**
+   * Parte en la que se está centrado, o null para ver la partitura entera.
+   *
+   * Centrarse en una parte oculta las demás con OSMD, que reserva su espacio:
+   * el papel no se mueve y las anotaciones se quedan donde estaban. Y de paso
+   * filtra las anotaciones de los demás, que es lo que hace que se pueda
+   * anotar «solo lo mío» sin que se mezcle.
+   */
+  focusedPartId: string | null;
+  setFocusedPartId: (partId: string | null) => void;
+  /**
+   * Transporte de la obra entera, en semitonos. Cambia lo que se lee y lo que
+   * suena: es pasar la pieza a otro tono.
+   */
+  setBaseTranspose: (semitones: number) => void;
+  /**
+   * Transposición de un instrumento: lo que suma a lo que suena para escribir
+   * lo que lee. Sólo afecta al papel.
+   */
+  setPartTranspose: (partId: string, semitones: number) => void;
+  /**
+   * Adopta la lectura que el archivo declara para cada parte.
+   *
+   * No es lo mismo que fijarla: lo que ya esté decidido en el documento manda,
+   * y si no hay nada que adoptar no se toca el documento (ni se guarda).
+   */
+  adoptDeclaredReadings: (declared: Record<string, number>) => void;
   setTimeline: (timeline: PlaybackTimeline | null) => void;
   setIsPlaying: (playing: boolean) => void;
   setPlayheadMeasure: (index: number | null) => void;
@@ -336,6 +409,7 @@ export const useStore = create<StoreState>((set, get) => ({
   playheadMeasure: null,
   mutedParts: [],
   followPlayhead: true,
+  focusedPartId: null,
 
   auth: loadAuth(),
   authBusy: false,
@@ -353,12 +427,22 @@ export const useStore = create<StoreState>((set, get) => ({
   markerWidth: 14,
   soloActiveLayer: false,
 
+  extent: EMPTY_EXTENT,
+
   past: [],
   future: [],
 
   async refreshLibrary() {
     let lib = await listScores();
-    if (lib.length === 0) lib = await repairIndex();
+    // El índice y lo guardado pueden discrepar: guardar son dos escrituras (el
+    // documento y después el índice) y si la pestaña muere entre las dos, o el
+    // navegador vacía parte de IndexedDB, queda una partitura completa que no
+    // aparece en la biblioteca y a la que no hay forma de llegar. Se compara con
+    // lo que hay de verdad —cuesta un `keys()`— y, si no cuadra, se rehace el
+    // índice a partir de los documentos, que son los que mandan.
+    if (lib.length === 0 || (await countStoredScores()) !== lib.length) {
+      lib = await repairIndex();
+    }
     set({ library: lib, ready: true });
   },
 
@@ -393,6 +477,7 @@ export const useStore = create<StoreState>((set, get) => ({
       isPlaying: false,
       playheadMeasure: null,
       mutedParts: [],
+      focusedPartId: null,
     });
   },
 
@@ -412,6 +497,7 @@ export const useStore = create<StoreState>((set, get) => ({
       isPlaying: false,
       playheadMeasure: null,
       mutedParts: [],
+      focusedPartId: null,
     });
     try {
       const library = await saveScore(doc);
@@ -439,16 +525,30 @@ export const useStore = create<StoreState>((set, get) => ({
       playheadMeasure: null,
       parts: [],
       timeline: null,
+      focusedPartId: null,
     });
   },
 
   async saveNow() {
     const { doc, saving } = get();
-    if (!doc || saving) return;
+    if (!doc) return;
+    if (saving) {
+      // Hay una escritura en curso. Esta petición NO se puede descartar: su
+      // temporizador ya se ha consumido, así que nadie volvería a pedir el
+      // guardado y el último trazo se quedaría sin escribir hasta el siguiente
+      // cambio (o hasta cerrar, que es cuando más caro sale perderlo). Se vuelve
+      // a programar: la escritura en curso dura milisegundos.
+      scheduleSave();
+      return;
+    }
     set({ saving: true });
     try {
       const library = await saveScore(doc);
-      set({ library, saving: false, pendingSave: false, saveError: "" });
+      // Si mientras se escribía ha habido más cambios, el aviso de «sin
+      // guardar» sigue siendo verdad y no se puede apagar: es lo que consulta
+      // el aviso al cerrar la pestaña.
+      const stillCurrent = get().doc === doc;
+      set({ library, saving: false, pendingSave: !stillCurrent, saveError: "" });
     } catch (error) {
       // Un fallo aquí es grave y hay que decirlo: IndexedDB puede rechazar la
       // escritura por cuota o en modo privado, y seguir dibujando sin avisar
@@ -512,6 +612,10 @@ export const useStore = create<StoreState>((set, get) => ({
       // quien acaba de pedir acceso espera ver sus partituras, no una pantalla
       // vacía que le obligue a buscar un botón.
       await get().refreshRemote();
+      // Sincronizar aquí no siempre sube: si este equipo venía de OTRA cuenta,
+      // `syncNow` no toca Drive y explica por qué (lo que hay guardado es de
+      // quien lo dibujó). Las partituras de Drive se listan igual, que eso no
+      // expone el trabajo de nadie.
       await get().syncNow();
       return true;
     } catch (error) {
@@ -568,7 +672,7 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  async syncNow() {
+  async syncNow(options) {
     const { auth, syncStatus } = get();
     // Dos sincronizaciones a la vez pisarían el mismo estado y podrían subir y
     // bajar la misma partitura en paralelo.
@@ -581,6 +685,29 @@ export const useStore = create<StoreState>((set, get) => ({
       return;
     }
 
+    // La biblioteca de este equipo puede ser de otra persona (un ordenador
+    // compartido, o simplemente otra cuenta tuya): subirla sin preguntar
+    // metería su trabajo en esta carpeta de Drive. Con `force` —el botón, que
+    // es una decisión explícita— se sigue adelante y la cuenta pasa a ser la
+    // dueña de lo que hay aquí. Ver `needsOwnerConfirmation`.
+    const owner = loadSyncOwner();
+    if (!options?.force && needsOwnerConfirmation(owner, auth.email)) {
+      set({
+        syncStatus: "idle",
+        syncMessage:
+          `Este equipo tiene las partituras de ${owner} y has entrado como ${auth.email}. ` +
+          "Pulsa «Sincronizar ahora» si quieres subirlas también a esta cuenta.",
+      });
+      return;
+    }
+
+    // Y antes de hablar con Drive, lo que esté a medias se escribe: sincronizar
+    // con el documento viejo que aún está en disco subiría una versión atrasada,
+    // y el guardado siguiente la dejaría otra vez pendiente (un vaivén de
+    // subidas que no acaba).
+    if (get().pendingSave) await get().saveNow();
+
+    saveSyncOwner(auth.email);
     set({ syncStatus: "working", syncMessage: "Sincronizando…" });
     try {
       const { report, state, remote } = await syncWithDrive(
@@ -704,14 +831,109 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ markerWidth: Math.max(6, Math.min(60, markerWidth)) }),
   toggleSoloActiveLayer: () => set((s) => ({ soloActiveLayer: !s.soloActiveLayer })),
 
+  setExtent: (extent) => set({ extent }),
+
+  setFocusedPartId: (focusedPartId) =>
+    set((state) => ({
+      focusedPartId,
+      // Centrarse en un instrumento también decide a quién se le apuntan las
+      // notas nuevas: si estás mirando el saxo, una dinámica es del saxo.
+      targetPartId: focusedPartId ?? state.targetPartId,
+    })),
+
+  // El transporte va a los metadatos y no al historial: éste guarda capas, y
+  // meter los metadatos dentro obligaría a «deshacer» a saber de dos cosas.
+  setBaseTranspose: (semitones) => get().setMeta({ transpose: semitones }),
+
+  setPartTranspose: (partId, semitones) => {
+    const state = get();
+    if (!state.doc) return;
+    set({
+      doc: {
+        ...state.doc,
+        meta: {
+          ...state.doc.meta,
+          partTransposes: {
+            ...state.doc.meta.partTransposes,
+            [partId]: semitones,
+          },
+          updatedAt: Date.now(),
+        },
+      },
+    });
+    scheduleSave();
+  },
+
+  adoptDeclaredReadings: (declared) => {
+    const state = get();
+    if (!state.doc) return;
+    const merged = adoptReadings(state.doc.meta.partTransposes, declared);
+    // Sin nada que adoptar no se toca el documento: ni se guarda ni cambia de
+    // identidad, que es lo que evitaría que el lienzo se volviera a maquetar.
+    if (!merged) return;
+    set({
+      doc: {
+        ...state.doc,
+        meta: { ...state.doc.meta, partTransposes: merged, updatedAt: Date.now() },
+      },
+    });
+    scheduleSave();
+  },
+
+  reanchor: () => {
+    const state = get();
+    if (!state.doc || state.extent.boxes.length === 0) return;
+
+    // Camino rápido: en una partitura ya anclada no hay nada que hacer, y
+    // recorrer todas las capas para no cambiar nada despertaría a media
+    // aplicación en cada dibujado del lienzo.
+    const strokes = state.doc.layers.flatMap((l) => l.strokes);
+    const pins = state.doc.layers.flatMap((l) => l.pins);
+    if (!needsAnchoring(strokes, pins)) return;
+
+    let changed = false;
+    const layers = state.doc.layers.map((l) => {
+      // Una capa que no gana ninguna ancla se devuelve tal cual: así lo único
+      // que cambia de identidad en el documento es lo que de verdad cambió.
+      let touched = false;
+      const nextStrokes = l.strokes.map((s) => {
+        if (s.anchors && s.anchors.length > 0) return s;
+        const anchors = anchorsFor(s, state.extent);
+        if (!anchors) return s;
+        touched = true;
+        return { ...s, anchors };
+      });
+      const nextPins = l.pins.map((p) => {
+        if (p.anchor) return p;
+        const anchor = anchorForPin(p, state.extent);
+        if (!anchor) return p;
+        touched = true;
+        return { ...p, anchor };
+      });
+      if (!touched) return l;
+      changed = true;
+      return { ...l, strokes: nextStrokes, pins: nextPins };
+    });
+
+    if (!changed) return;
+    set({ doc: { ...state.doc, layers } });
+    scheduleSave();
+  },
+
   commitStroke: (stroke) => {
     const state = get();
     if (!state.doc) return;
+    // El trazo nace anclado: quien dibuja no tiene que acordarse de anclarlo, y
+    // sin esto una transposición posterior lo dejaría apuntando al papel.
+    const anchored: Stroke = {
+      ...stroke,
+      anchors: stroke.anchors ?? anchorsFor(stroke, state.extent) ?? undefined,
+    };
     set(
       edit(state, (layers, activeLayerId) => ({
         layers: mapLayer(layers, activeLayerId, (l) => ({
           ...l,
-          strokes: [...l.strokes, stroke],
+          strokes: [...l.strokes, anchored],
         })),
         activeLayerId,
       })),
@@ -764,7 +986,7 @@ export const useStore = create<StoreState>((set, get) => ({
     scheduleSave();
   },
 
-  addPin: ({ x, y, measureIndex, text, tag }) => {
+  addPin: ({ x, y, measureIndex, text, tag, anchor }) => {
     const state = get();
     if (!state.doc) return null;
     const id = uid("pin");
@@ -773,6 +995,7 @@ export const useStore = create<StoreState>((set, get) => ({
       x,
       y,
       measureIndex,
+      anchor: anchor ?? anchorOf(state.extent, x, y) ?? undefined,
       resolved: false,
       createdAt: Date.now(),
       messages: [
@@ -851,7 +1074,7 @@ export const useStore = create<StoreState>((set, get) => ({
     scheduleSave();
   },
 
-  movePin: (pinId, x, y, measureIndex) => {
+  movePin: (pinId, x, y, measureIndex, anchor) => {
     const state = get();
     if (!state.doc) return;
     set(
@@ -866,6 +1089,11 @@ export const useStore = create<StoreState>((set, get) => ({
                         ...p,
                         x,
                         y,
+                        // El ancla se recalcula desde la posición nueva. Si no
+                        // se puede (partitura aún sin medir), se borra: dejar
+                        // el ancla vieja haría que el comentario volviera al
+                        // sitio del que lo acabas de mover.
+                        anchor: anchor ?? anchorOf(state.extent, x, y) ?? undefined,
                         // Sin destinación no se toca: sólo cuando llega se
                         // actualiza, para no borrar el compás de un pin que
                         // simplemente se ha movido unos píxeles dentro del
@@ -1056,13 +1284,22 @@ export const useStore = create<StoreState>((set, get) => ({
           id: uid("layer"),
           name: `${source.name} (copia)`,
           color,
-          strokes: source.strokes.map((s) => ({ ...s, id: uid("stroke") })),
+          // Las anclas se copian una a una: con `{...s}` las dos copias
+          // compartirían el MISMO array, y cualquier cosa que lo tocara en un
+          // sitio movería la tinta del otro. Los identificadores sí son nuevos:
+          // son dos trazos distintos aunque salgan del mismo sitio.
+          strokes: source.strokes.map((s) => ({
+            ...s,
+            id: uid("stroke"),
+            anchors: s.anchors?.map((anchor) => ({ ...anchor })),
+          })),
           pins: source.pins.map((p) => ({
             ...p,
             id: uid("pin"),
+            anchor: p.anchor ? { ...p.anchor } : undefined,
             messages: p.messages.map((m) => ({ ...m, id: uid("msg") })),
           })),
-          notes: source.notes.map((n) => ({ ...n, id: uid("note") })),
+          notes: source.notes.map((n) => ({ ...n, id: uid("note"), tags: [...n.tags] })),
         };
         return { layers: [...layers, copy], activeLayerId: copy.id };
       }),
@@ -1133,14 +1370,32 @@ export function useActiveLayer(): Layer | null {
 }
 
 /** Capas que deben pintarse, respetando "solo capa activa" y el orden de z. */
+/**
+ * Capas que deben pintarse, ya con el filtro de la parte en la que se está
+ * centrado.
+ *
+ * El filtro vive aquí, y no en quien pinta, porque hay tres sitios que tienen
+ * que estar de acuerdo —lo que se dibuja, lo que borra la goma y lo que
+ * encuentra el puntero—: si cada uno filtrara por su cuenta, se podría borrar
+ * lo que no se ve.
+ */
 export function visibleLayers(
   layers: Layer[],
   activeLayerId: string,
   soloActiveLayer: boolean,
+  focusedPartId: string | null = null,
 ): Layer[] {
-  return layers.filter(
+  const shown = layers.filter(
     (l) => l.visible && (!soloActiveLayer || l.id === activeLayerId),
   );
+  if (!focusedPartId) return shown;
+  return shown.map((l) => ({
+    ...l,
+    strokes: l.strokes.filter((s) => strokeBelongsToPart(s, focusedPartId)),
+    pins: l.pins.filter((p) => pinBelongsToPart(p, focusedPartId)),
+    // Una dinámica del piano no pinta nada mientras se mira el saxo.
+    notes: l.notes.filter((n) => !n.partId || n.partId === focusedPartId),
+  }));
 }
 
 export function collectPins(layers: Layer[]): { pin: Pin; layer: Layer }[] {

@@ -15,6 +15,7 @@
  */
 
 import type { PartInfo } from "./types";
+import { readingFromPlaybackOffset, shiftsFor } from "./transpose";
 
 export const DEFAULT_UNIT_TO_PIXEL = 10;
 
@@ -55,6 +56,19 @@ export interface ScoreExtent {
   height: number;
 }
 
+/**
+ * Extensión de una partitura que todavía no se ha medido: aún no hay dibujado
+ * del que sacar cajas. Se comparte la misma instancia para poder compararla por
+ * identidad, que es como el lienzo sabe si ya tiene música medida.
+ */
+export const EMPTY_EXTENT: ScoreExtent = {
+  boxes: [],
+  staffBoxes: [],
+  parts: [],
+  width: 0,
+  height: 0,
+};
+
 interface RawInstrument {
   Id?: string;
   IdString?: string;
@@ -63,11 +77,15 @@ interface RawInstrument {
   Abbreviation?: string;
   AbbreviationLabel?: { text?: string } | string;
   Staves?: unknown[];
+  Visible?: boolean;
+  Transpose?: number;
+  PlaybackTranspose?: number;
 }
 
 interface RawSheet {
   Parts?: RawInstrument[];
   Instruments?: RawInstrument[];
+  Transpose?: number;
 }
 
 interface RawBox {
@@ -211,6 +229,88 @@ export function readScoreExtent(osmd: unknown): ScoreExtent {
   );
 
   return { boxes, staffBoxes, parts, width: maxX, height: maxY };
+}
+
+/**
+ * Deja dibujada una sola parte, o todas si `partId` es null.
+ *
+ * Lo importante es lo que NO hace: no recorta el papel. OSMD reserva el espacio
+ * de los pentagramas ocultos (comprobado: siguen en `MeasureList`, con sus
+ * mismas coordenadas), así que la partitura no se re-maqueta y las anotaciones
+ * se quedan exactamente donde estaban. Si algún día una versión de OSMD sí
+ * recortara, el anclaje por compases ya está para que la tinta siga a su parte.
+ *
+ * Hay que llamarlo DESPUÉS de `load()` y ANTES de `render()`.
+ */
+export function setFocusedPart(osmd: unknown, partId: string | null): void {
+  const owner = osmd as OSMDOwner;
+  const instruments = owner.Sheet?.Parts ?? owner.Sheet?.Instruments ?? [];
+  for (const instrument of instruments) {
+    const id = instrument.IdString ?? instrument.Id ?? "";
+    instrument.Visible = partId == null || id === partId;
+  }
+}
+
+/**
+ * Lo que el archivo declara de cada parte, en nuestra convención (semitonos que
+ * se suman a lo que suena para escribir lo que se lee).
+ *
+ * Un archivo de banda ya dice que el saxo lee en Mi♭; adoptarlo es lo que hace
+ * que se abra tal y como se escribió. Ver `lib/transpose.ts`.
+ */
+export function declaredReadings(osmd: unknown): Record<string, number> {
+  const owner = osmd as OSMDOwner;
+  const instruments = owner.Sheet?.Parts ?? owner.Sheet?.Instruments ?? [];
+  const readings: Record<string, number> = {};
+  for (const instrument of instruments) {
+    const id = instrument.IdString ?? instrument.Id ?? "";
+    if (!id) continue;
+    readings[id] = readingFromPlaybackOffset(instrument.PlaybackTranspose ?? 0);
+  }
+  return readings;
+}
+
+/**
+ * Aplica el transporte de la obra y el de cada instrumento.
+ *
+ * Son dos cosas distintas y por eso se aplican en sitios distintos:
+ *
+ *  - `Sheet.Transpose` mueve la obra entera. Eso es música: se lee y se oye en
+ *    otro tono.
+ *  - `Instrument.Transpose` es lo que lee un instrumento concreto. Eso es una
+ *    forma de escribir, no un cambio musical, así que **no puede** tocar el
+ *    sonido. Y no lo toca: OSMD no modifica las alturas de origen, sólo añade
+ *    este desplazamiento al dibujo (`GraphicalMeasure.getTransposedHalftones()`
+ *    = `Sheet.Transpose` + `Instrument.Transpose`), y la reproducción lee las
+ *    alturas de origen. O sea que la invariante sale del propio reparto de
+ *    responsabilidades, no de compensar un desplazamiento con otro.
+ *
+ * `Instrument.Transpose` se mide **sobre las notas del archivo**, no sobre lo
+ * que suenan: en una parte que el archivo ya escribió en Mi♭ hay que restar lo
+ * que declara, o al elegir «lee en Mi♭» la parte subiría una sexta en pantalla
+ * sin que nadie lo hubiera pedido.
+ *
+ * Se llama DESPUÉS de `load()` y ANTES de `render()`. Necesita que el
+ * renderizador tenga puesta una `TransposeCalculator`: sin ella `Transpose` se
+ * guarda y no hace nada, que es la trampa clásica de esta API.
+ */
+export function applyTransposition(
+  osmd: unknown,
+  base: number,
+  readings: Record<string, number> | undefined,
+): void {
+  const owner = osmd as OSMDOwner;
+  const instruments = owner.Sheet?.Parts ?? owner.Sheet?.Instruments ?? [];
+  for (const instrument of instruments) {
+    const id = instrument.IdString ?? instrument.Id ?? "";
+    const reading = readings?.[id] ?? 0;
+    const declared = readingFromPlaybackOffset(instrument.PlaybackTranspose ?? 0);
+    // `part` y no el total: la obra la suma OSMD por su cuenta, con `Sheet.Transpose`.
+    instrument.Transpose = shiftsFor(base, reading, declared).part;
+  }
+  // La obra, al final: al asignarla se recalcula todo el transporte y tiene que
+  // ver ya lo de cada instrumento.
+  if (owner.Sheet) owner.Sheet.Transpose = base;
 }
 
 /**

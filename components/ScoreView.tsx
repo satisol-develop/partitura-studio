@@ -369,7 +369,10 @@ export default function ScoreView() {
           <span className="sr-only sm:hidden">Drive</span>
         </button>
         <button
-          onClick={() => void syncNow()}
+          // `force`: pulsar «sincronizar ahora» ES la confirmación de subir a
+          // esta cuenta la biblioteca de este equipo. Sin él, si aquí trabajó
+          // otra persona, la sincronización automática no sube nada.
+          onClick={() => void syncNow({ force: true })}
           className="touch-target grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:text-ink"
           title="Sincronizar ahora (sube lo cambiado y baja lo que haya en Drive)"
           hidden={!syncMessage}

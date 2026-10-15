@@ -76,6 +76,22 @@ pisarse.
 **Reproducir el XML.** Suena el contenido del documento, con silenciado por
 parte para estudiar tu voz oyendo las demás. Ver la sección de reproducción.
 
+**Leer cada parte en su tono, y transportar la obra.** En el panel de plantilla
+cada parte se pone en la tonalidad en la que la lee su instrumento (saxo alto en
+Mi♭, trompa en Fa, clarinete en Si♭, saxo tenor una novena abajo…) y la obra
+entera se transporta por intervalos, arriba y abajo. Son dos cosas distintas y
+van por caminos distintos: la lectura de un instrumento **no cambia lo que
+suena**, y transportar la obra sí, en el papel y en el oído. Y si una partitura
+ya viene escrita para un instrumento que se transpone, se lee lo que el propio
+archivo declara y la parte se dibuja tal y como se escribió. Ver «Leer en otro
+tono».
+
+**Centrarse en una parte.** Con «sólo esta parte» se dibuja únicamente su
+pentagrama y se apartan las anotaciones de las demás, para trabajar sobre tu
+voz sin mezclar el trabajo de los otros atriles. El papel no se recorta, así que
+nada se mueve de sitio, y las anotaciones de las demás partes siguen guardadas
+donde estaban.
+
 **Mover un comentario.** Un pin se arrastra en modo *Seleccionar*: al soltarlo se
 recalcula el compás al que ha ido a parar, porque un comentario movido dos
 sistemas más abajo pertenece al compás de destino. Antes había que borrarlo y
@@ -140,8 +156,57 @@ __partitura.staffBoxes()        // cajas por pentagrama (para separar partes)
 __partitura.measureAt(x, y)     // qué compás cae en un punto de partitura
 __partitura.zoom()
 __partitura.osmd()              // documento vivo de OSMD (notas, cursor, tiempo)
-__partitura.snapshot()          // herramientas, capas, plantilla y reproducción
+__partitura.snapshot()          // herramientas, capas, plantilla, reproducción
+                                // y transporte
 ```
+
+El `snapshot()` lleva, por cada trazo, la posición **guardada** y la **dibujada**
+(`guardadoEn` / `dibujadoEn`), sus anclas y las partes a las que pertenece
+(`partesDe`), y el estado del transporte (`transposes`: la obra, cómo lee cada
+parte y lo que declara el archivo). Esa pareja de números es lo que permite
+comprobar a mano que re-maquetar no despega la tinta de la música, sin tener que
+creérselo.
+
+### Cómo se ancla una anotación
+
+Con el ancho de maquetación fijo, la partitura de un documento no se mueve…
+hasta que algo la cambia. Transportar, por ejemplo, introduce alterados, y con
+ellos cambia el ancho de los compases; ocultar una parte sube todos los
+pentagramas. Guardar «el punto (412, 308) del papel» dejaría la tinta apuntando
+a otra cosa.
+
+Así que una anotación no guarda dónde estaba en el papel, sino **en qué compás,
+sobre qué pentagrama y en qué sitio de esa caja** (`lib/anchors.ts`):
+
+```ts
+{ m: 12, p: "P2", o: 1, u: 0.34, v: -0.6 }
+// compás 12, parte P2 (piano), segundo pentagrama, y un punto que cae a un 34 %
+// del ancho de su caja y un 60 % de su alto POR ENCIMA (una digitación va arriba)
+```
+
+- El pentagrama se identifica por **parte + ordinal**, nunca por su índice
+  global. No es un detalle: al ocultar una parte, OSMD renumera los pentagramas
+  que quedan, y con el índice global la digitación de un saxo aparecía de pronto
+  sobre el piano.
+- Las posiciones son **fracciones** de la caja (por eso valen menos que 0 o más
+  que 1), así que siguen siendo válidas aunque el compás se ensanche.
+- Un trazo ancla **todos** sus puntos; un comentario, uno. Si un punto cae fuera
+  de todos los pentagramas, se ancla al compás.
+- Todo pasa por una sola puerta (`strokePoints` / `pinPoint`): quien dibuja,
+  quien borra con la goma y quien busca un trazo bajo el puntero ven exactamente
+  lo mismo. Si cada uno resolviera por su cuenta, la tinta podría pintarse en un
+  sitio y borrarse en otro.
+- Un documento guardado **antes** de que existiera el anclaje se completa al
+  abrirlo, y el cálculo es fiel porque el ancho de maquetación va congelado
+  dentro del documento: la primera maquetación de un documento antiguo es la
+  misma en la que se dibujó.
+
+Medido con el trío de ejemplo (saxo, piano y bajo) y sus cinco trazos: al poner
+el saxo en Mi♭, el segundo compás pasa de empezar en x=338,6 a x=378,1 (la
+armadura de tres sostenidos ocupa más) y los trazos se van con él —los del
+primero, de 151,0 a 152,2; los del segundo, de 346,6 a 386,1—. Al volver a Do,
+las cajas y los trazos vuelven **exactamente** a donde estaban (145,0/166,5 para
+la primera caja, 151,0 para el primer trazo), sin un decimal de deriva.
 
 ## Publicar en GitHub Pages
 
@@ -402,6 +467,20 @@ distintos.
   se abre por su `container.xml` (y si no lo trae, por el primer XML), 26 MB se
   rechazan sin colgar la pestaña, y el nombre del MusicXML exportado sale sin
   acentos ni barras.
+- `tests/anchors.test.mjs` — el anclaje: en qué compás y pentagrama cae un
+  punto, que un pentagrama se identifique por parte y ordinal (no por índice
+  global), que un trazo sin ancla de un documento antiguo se complete, y que al
+  re-maquetar cada punto vuelva a caer donde le toca.
+- `tests/transpose.test.mjs` — la lectura y el transporte: el catálogo de
+  transposiciones reales (saxo alto 9, tenor 14 —una novena, no dos—, trompa 7),
+  que un valor de fuera del catálogo nunca se pierda al abrir el desplegable, la
+  traducción del `<transpose>` de MusicXML (que va en el sentido contrario al
+  nuestro) y, sobre todo, la invariante: para cualquier combinación de
+  transporte, lectura y archivo declarado, lo que se lee es lo que suena más la
+  lectura.
+- `tests/playback.test.mjs` — la mitad sonora: que el motor sume lo que declara
+  el archivo y el transporte de la obra, y que cambiar cómo lee una parte **no
+  cambie ni una nota** de lo que suena.
 
 ## Reproducción
 
@@ -439,6 +518,60 @@ en clave de sol, no bajo el pentagrama.
 
 Sumar ese desfase es todo, pero olvidarlo hacía que la partitura entera sonara
 **tres octavas por debajo** sin que se viera nada raro en pantalla.
+
+## Leer en otro tono: la lectura de un instrumento y el transporte de la obra
+
+Aquí se confunden dos cosas todo el rato, y de esa confusión salen los errores,
+así que van separadas por escrito:
+
+1. **Transportar la obra** es una decisión musical: la pieza suena en otra
+   tonalidad. Cambia lo que se lee **y** lo que se oye.
+2. **Que un instrumento se transponga** es una forma de escribir. El saxo alto
+   en Mi♭ lee un Do y suena un Mi♭. En un trío, el saxo, el piano y el bajo
+   tienen que sonar en el mismo tono, así que **poner una parte en Mi♭ no puede
+   cambiar el tono de la música**. Si el saxofonista estudia con el piano, el
+   piano no puede sonar en otra tonalidad por haber puesto su parte en Mi♭.
+
+Todo se mide **sobre las alturas que trae el archivo**, que es la única
+referencia que no cambia nunca, y `lib/transpose.ts` devuelve los tres
+desplazamientos separados porque van a sitios distintos:
+
+| | qué es | dónde va |
+| --- | --- | --- |
+| `sheet` | la obra entera | `Sheet.Transpose` de OSMD |
+| `part` | la lectura menos lo que declara el archivo | `Instrument.Transpose` de OSMD |
+| `playback` | lo que suena | el motor de audio (`lib/playback.ts`) |
+
+La invariante que sostiene todo es que **lo que se lee sea lo que suena más la
+lectura** (`sheet + part = playback + reading`): si se rompiera, poner una parte
+en Mi♭ cambiaría el tono de la música. La línea donde vive esa invariante es una
+suma en el motor (`altura de origen + lo que declara el archivo + la obra`), y lo
+que **no** aparece en ella es `Instrument.Transpose`: cambiar la notación de una
+parte no puede entrar en la cuenta del sonido.
+
+- **Lo que declara el archivo se adopta.** Un MusicXML de banda ya dice que el
+  saxo lee en Mi♭ (con `<transpose>`, y OSMD lo deja en `PlaybackTranspose`). Al
+  abrirlo se lee esa declaración y se apunta como la lectura de la parte, sin
+  pisar la que alguien haya elegido ya; una partitura en Do no declara nada y no
+  escribe nada. Comprobado de punta a punta con un clarinete en Si♭ que declara
+  −2: el panel dice «lee en Si♭», la parte se dibuja **exactamente como se
+  escribió** (desplazamiento 0 sobre sus notas, no uno de +2 encima) y el sonido
+  sale una segunda mayor por debajo de lo escrito.
+- **La trampa que costó una medición:** `render()` a secas transpone la
+  **armadura** y deja las notas donde estaban. Con el saxo en Mi♭ quedaba un
+  pentagrama con tres sostenidos y un Do debajo —es decir, mal—. Lo que rehace la
+  plancha gráfica con las alturas nuevas es `osmd.updateGraphic()` antes de
+  `render()`. Medido: un Do-Re-Mi-Fa escrito se convierte en La-Si-Do♯-Re, una
+  sexta mayor arriba, que es lo que lee un saxo alto.
+- **Y un despiste propio, para que no se repita:** las cajas que se leen justo
+  después de `updateGraphic()` vienen en **unidades de OSMD**, no en píxeles (la
+  conversión ×10 está en `lib/geometry.ts`). Leerlas como píxeles hace parecer
+  que `updateGraphic()` destroza la maquetación («compases de 23 px»), y no es
+  verdad: son 230 px.
+- **Transportar re-maqueta** la partitura, y eso mueve los compases. Las
+  anotaciones no se quedan atrás porque están ancladas (ver «Cómo se ancla una
+  anotación»), y el viaje de ida y vuelta es exacto: a Do, un tono arriba y otra
+  vez a Do, las cajas y los trazos vuelven a las mismas coordenadas, al decimal.
 
 ## Móvil y tableta
 
@@ -508,9 +641,22 @@ tumbado), no deducido del CSS.
   reparte en dos pentagramas si el registro cruza el Do central. Se pierden
   dinámicas, articulaciones y pedal (MIDI no las lleva de forma fiable) y las
   pistas de percusión (canal 10) se descartan.
-- **Cambiar el ancho de maquetación** de una partitura ya anotada requeriría
-  re-anclar todas las anotaciones transformándolas con la caja de cada compás.
-  Todavía no está hecho, por eso el ancho es fijo.
+- **Cambiar el ancho de maquetación** de una partitura ya anotada ya no
+  despegaría la tinta —está anclada—, pero sigue sin ser una opción: el ancho de
+  maquetación va congelado en el documento para que un documento antiguo se
+  pueda anclar con fidelidad al abrirlo.
+- **El transporte y la lectura viven en los metadatos del documento**, no en el
+  historial de deshacer: `Ctrl+Z` deshace trazos y capas, no el transporte. El
+  cambio se guarda al momento, y para volver atrás se elige «en su tono» / «lee
+  en Do» otra vez (el viaje de vuelta es exacto).
+- **El deletreo de una parte transpuesta lo decide OSMD**, que cuenta semitonos
+  y mira la armadura. En casos enarmónicos puede escribir una doble alteración
+  donde un copista escribiría otra cosa; OSMD trae una calculadora de deletreo
+  por intervalos (`IntervalTransposeCalculator`) que aquí no se usa.
+- **El catálogo de lecturas es el que se usa de verdad** (Do, Si♭, La, Fa, Mi♭,
+  y las octavas del pícolo, el tenor y el barítono). Una lectura de fuera del
+  catálogo —de un archivo hecho con otra herramienta— no se pierde: se conserva
+  y se muestra con números, pero sin el nombre del instrumento.
 - **Paginación**: se usa el modo continuo de OSMD (un solo lienzo alto), no
   páginas A4. Los saltos de sistema siguen siendo los correctos; no hay saltos
   de página.
@@ -552,7 +698,7 @@ components/
   ScoreView.tsx          disposición del espacio de trabajo (paneles laterales o cajón)
   ScoreCanvas.tsx        render de OSMD + lienzo de anotaciones + herramientas
   LayerPanel.tsx         gestión de capas
-  AnnotationsPanel.tsx   editor de compás, hilos de comentarios, trazo seleccionado
+  AnnotationsPanel.tsx   compás, plantilla (partes, lectura y transporte), hilos y trazo
   Toolbar.tsx            barra de herramientas
   TransportBar.tsx       reproducción: play, posición, silenciar, seguir
   LibraryView.tsx        biblioteca de partituras
@@ -561,6 +707,8 @@ apps-script/
   Code.gs                backend en Google Apps Script (anotaciones + MusicXML en Drive)
 lib/
   geometry.ts            ÚNICO sitio con conversión de coordenadas de OSMD
+  anchors.ts             anclaje de las anotaciones, y de quién es cada una
+  transpose.ts           lectura de cada instrumento y transporte de la obra
   types.ts               modelo de datos (capa → trazos / pines / notas)
   store.ts               estado, historial de deshacer, autoguardado, sesión y sincronización
   auth.ts                sesión guardada y cuándo hay que pedir acceso

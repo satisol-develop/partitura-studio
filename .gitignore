@@ -11,3 +11,4 @@ next-env.d.ts
 # Estado del entorno de trabajo (identificadores de la herramienta, no del
 # proyecto): no viaja al repositorio ni, por tanto, al sitio publicado.
 .freebuff/
+.freebuff-logs/

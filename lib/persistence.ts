@@ -26,6 +26,23 @@ export async function listScores(): Promise<ScoreSummary[]> {
   return index.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+/**
+ * Cuántas partituras hay guardadas de verdad, al margen de lo que diga el
+ * índice.
+ *
+ * Existe porque guardar son DOS escrituras (el documento y el índice) y la
+ * pestaña puede morir entre las dos: el documento queda ahí, completo, y la
+ * partitura desaparece de la biblioteca sin haber perdido nada. Comparar este
+ * número con el del índice es lo que detecta ese caso y también el contrario
+ * (entradas de índice cuyo documento ya no está).
+ */
+export async function countStoredScores(): Promise<number> {
+  const allKeys = await keys();
+  return allKeys.filter(
+    (key): key is string => typeof key === "string" && key.startsWith(SCORE_PREFIX),
+  ).length;
+}
+
 export async function loadScore(id: string): Promise<ScoreDocument | null> {
   const doc = await get<ScoreDocument>(scoreKey(id));
   return doc ?? null;

@@ -2,20 +2,27 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  EMPTY_EXTENT,
+  applyTransposition,
   clientToScore,
+  declaredReadings,
   distToSegment,
   measureAt,
   pressureOutline,
   readScoreExtent,
+  setFocusedPart,
   spanBands,
   type ScoreExtent,
 } from "@/lib/geometry";
+import { pinPoint, strokePoints } from "@/lib/anchors";
+import { effectiveReadings } from "@/lib/transpose";
 import { buildTimeline, getSharedPlayer } from "@/lib/playback";
 import { collectPins, useStore, visibleLayers } from "@/lib/store";
 import {
   noteRange,
   uid,
   type Layer,
+  type Pin,
   type Pt,
   type Stroke,
 } from "@/lib/types";
@@ -61,14 +68,6 @@ const clampZoom = (zoom: number) => Math.max(0.3, Math.min(3, Number(zoom.toFixe
  */
 const READABLE_MIN_ZOOM = 0.55;
 
-const EMPTY_EXTENT: ScoreExtent = {
-  boxes: [],
-  staffBoxes: [],
-  parts: [],
-  width: 0,
-  height: 0,
-};
-
 export default function ScoreCanvas() {
   const doc = useStore((s) => s.doc);
   const zoom = useStore((s) => s.zoom);
@@ -99,6 +98,12 @@ export default function ScoreCanvas() {
   const setTimeline = useStore((s) => s.setTimeline);
   const setPlayheadMeasure = useStore((s) => s.setPlayheadMeasure);
   const setIsPlaying = useStore((s) => s.setIsPlaying);
+  const setStoreExtent = useStore((s) => s.setExtent);
+  const adoptDeclaredReadings = useStore((s) => s.adoptDeclaredReadings);
+  const reanchor = useStore((s) => s.reanchor);
+  const parts = useStore((s) => s.parts);
+  const focusedPartId = useStore((s) => s.focusedPartId);
+  const setFocusedPartId = useStore((s) => s.setFocusedPartId);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -118,6 +123,12 @@ export default function ScoreCanvas() {
   } | null>(null);
   const appliedZoom = useRef<number | null>(null);
   const osmdRef = useRef<unknown>(null);
+  /**
+   * Partitura que está dibujada ahora mismo. Sirve para distinguir «abrir otra
+   * partitura» de «volver a dibujar ésta» (al cambiar el transporte): lo primero
+   * vacía la pantalla, lo segundo no debe hacerlo.
+   */
+  const renderedScore = useRef<string | undefined>(undefined);
 
   const [extent, setExtent] = useState<ScoreExtent>(EMPTY_EXTENT);
   const [contentHeight, setContentHeight] = useState(0);
@@ -130,6 +141,10 @@ export default function ScoreCanvas() {
   // y no del objeto `doc` completo (que cambia con cada trazo).
   const scoreId = doc?.meta.id;
   const scoreXml = doc?.xml;
+  // Se extraen igual que el XML: cambiar el transporte re-maqueta la partitura,
+  // así que tienen que disparar el mismo efecto que abrir otro documento.
+  const baseTranspose = doc?.meta.transpose ?? 0;
+  const partTransposes = doc?.meta.partTransposes;
 
   const boxes = extent.boxes;
 
@@ -165,9 +180,52 @@ export default function ScoreCanvas() {
 
   const layers = useMemo(() => doc?.layers ?? [], [doc?.layers]);
   const drawn = useMemo(
-    () => visibleLayers(layers, activeLayerId, soloActiveLayer),
-    [layers, activeLayerId, soloActiveLayer],
+    () => visibleLayers(layers, activeLayerId, soloActiveLayer, focusedPartId),
+    [layers, activeLayerId, soloActiveLayer, focusedPartId],
   );
+
+  /**
+   * Posiciones ya resueltas desde su ancla.
+   *
+   * Se calculan una vez por maquetación y las comparten el dibujo, la goma, el
+   * buscador de trazos y el arrastre de comentarios: es lo que garantiza que
+   * todos ven lo mismo. Si cada uno resolviera por su cuenta, la tinta donde se
+   * pinta y la tinta donde se borra podrían no coincidir.
+   */
+  const strokeView = useMemo(() => {
+    const map = new Map<string, Pt[]>();
+    for (const layer of drawn) {
+      for (const stroke of layer.strokes) map.set(stroke.id, strokePoints(stroke, extent));
+    }
+    return map;
+  }, [drawn, extent]);
+
+  const pinView = useMemo(() => {
+    const map = new Map<string, { x: number; y: number }>();
+    for (const layer of drawn) {
+      for (const pin of layer.pins) map.set(pin.id, pinPoint(pin, extent));
+    }
+    return map;
+  }, [drawn, extent]);
+
+  const pointsOf = useCallback(
+    (stroke: Stroke) => strokeView.get(stroke.id) ?? stroke.points,
+    [strokeView],
+  );
+  const pinAt = useCallback(
+    (pin: Pin) => pinView.get(pin.id) ?? { x: pin.x, y: pin.y },
+    [pinView],
+  );
+
+  /**
+   * Un documento guardado antes de que existiera el anclaje se normaliza en
+   * cuanto hay maquetación con la que hacerlo. Se hace aquí, después de medir,
+   * porque el ancho de maquetación va congelado en el documento: esta primera
+   * maquetación es la misma en la que se dibujó, así que el cálculo es fiel.
+   */
+  useEffect(() => {
+    if (extent.boxes.length > 0) reanchor();
+  }, [extent, reanchor]);
 
   /* ---------------------------------------------------------------- */
   /* Render de la partitura                                            */
@@ -176,15 +234,29 @@ export default function ScoreCanvas() {
   useEffect(() => {
     if (!scoreId || !scoreXml || !hostRef.current) return;
     let cancelled = false;
-    setStatus("loading");
-    setExtent(EMPTY_EXTENT);
-    // La plantilla y la línea de tiempo las calcula y las vacía este efecto, que
-    // es quien tiene la partitura renderizada. No las toca el store: si
-    // `openScore` las vaciara al abrir, podría hacerlo *después* de que este
-    // efecto ya las hubiera llenado (la lectura de IndexedDB queda detrás de la
-    // escritura de guardado) y el transporte se quedaba sin partitura.
-    setParts([]);
-    setTimeline(null);
+    // Cambiar el transporte re-maqueta la misma partitura que ya está en
+    // pantalla. Vaciar aquí dejaría un parpadeo en blanco (y anunciaría una
+    // carga) por algo que en realidad es redibujar lo que ya se ve.
+    const sameScore = renderedScore.current === scoreId;
+    renderedScore.current = scoreId;
+    if (!sameScore) {
+      setStatus("loading");
+      setExtent(EMPTY_EXTENT);
+      // La plantilla y la línea de tiempo las calcula y las vacía este efecto,
+      // que es quien tiene la partitura renderizada. No las toca el store: si
+      // `openScore` las vaciara al abrir, podría hacerlo *después* de que este
+      // efecto ya las hubiera llenado (la lectura de IndexedDB queda detrás de
+      // la escritura de guardado) y el transporte se quedaba sin partitura.
+      setParts([]);
+      setTimeline(null);
+      // Y la extensión que conoce el almacén también se vacía. Es la que usan
+      // `commitStroke`, `addPin` y `movePin` para anclar, así que dejarla con los
+      // compases de la partitura anterior anclaría un trazo dibujado en este
+      // hueco mortal —el rato que OSMD tarda en maquetar— a las cajas de la otra
+      // partitura. Vacía, esas anotaciones nacen sin ancla y las ancla
+      // `reanchor` en cuanto hay maquetación nueva, que es su trabajo.
+      setStoreExtent(EMPTY_EXTENT);
+    }
 
     (async () => {
       try {
@@ -199,15 +271,41 @@ export default function ScoreCanvas() {
           drawComposer: true,
           drawPartNames: true,
         } as ConstructorParameters<typeof mod.OpenSheetMusicDisplay>[1]);
+        // Sin calculadora de transposición, `Transpose` se guarda y no hace
+        // nada. Es el paso que se olvida siempre, así que va aquí y no en una
+        // nota al pie.
+        osmd.TransposeCalculator = new mod.TransposeCalculator();
 
         await osmd.load(scoreXml);
         if (cancelled) return;
+        // Lo que el archivo ya declara sobre cómo se lee cada parte se adopta
+        // aquí, donde el modelo de OSMD está delante. La primera pasada usa la
+        // mezcla para que la parte se dibuje ya como se escribió: adoptarlo
+        // después enseñaría un salto de una sexta al abrir una partitura de
+        // banda.
+        const declared = declaredReadings(osmd);
+        adoptDeclaredReadings(declared);
+        // Centrarse en una parte oculta el dibujo de las demás. Va entre el
+        // `load` y el `render`, y no recorta el papel: OSMD reserva el espacio
+        // de lo oculto, así que las anotaciones no se mueven ni un píxel.
+        setFocusedPart(osmd, focusedPartId);
+        applyTransposition(osmd, baseTranspose, effectiveReadings(declared, partTransposes));
+        // Y hay que rehacer la plancha gráfica, que es el paso que se salta
+        // todo el mundo: `render()` sola transpone la **armadura** y deja las
+        // notas donde estaban, así que un saxo en Mi♭ acababa leyendo «tres
+        // sostenidos» con un Do debajo. Medido, no supuesto.
+        //
+        // Los desplazamientos de la plancha nueva siguen viniendo en unidades
+        // de OSMD (no en píxeles): quien los lee después los convierte.
+        osmd.updateGraphic();
         await Promise.resolve(osmd.render());
         if (cancelled) return;
 
         osmdRef.current = osmd;
         const measured = readScoreExtent(osmd);
         setExtent(measured);
+        // El almacén también necesita las cajas: es quien ancla al crear.
+        setStoreExtent(measured);
         setContentHeight(
           Math.max(measured.height, hostRef.current.offsetHeight),
         );
@@ -215,7 +313,9 @@ export default function ScoreCanvas() {
 
         // La línea de tiempo de reproducción se construye una sola vez, con la
         // partitura ya cargada, y sale del mismo modelo que se ha dibujado.
-        const timeline = buildTimeline(osmd);
+        // El transporte se le pasa al motor: OSMD sólo lo aplica al dibujo, así
+        // que sin esto la obra se leería en otro tono y sonaría en el de antes.
+        const timeline = buildTimeline(osmd, baseTranspose);
         const player = getSharedPlayer();
         player.stop();
         player.setTimeline(timeline);
@@ -248,7 +348,18 @@ export default function ScoreCanvas() {
     // Ojo: nada de las capas en esta lista. La partitura dibujada no depende de
     // las anotaciones, y volver a maquetarla al crear una capa movería los
     // compases y dejaría los trazos desalineados.
-  }, [scoreId, scoreXml, setParts, setMeasureNumbers, setTimeline]);
+  }, [
+    scoreId,
+    scoreXml,
+    baseTranspose,
+    partTransposes,
+    focusedPartId,
+    adoptDeclaredReadings,
+    setParts,
+    setMeasureNumbers,
+    setTimeline,
+    setStoreExtent,
+  ]);
 
   // Encuadre: si la partitura es más ancha que el hueco, se encaja.
   const fittedFor = useRef<string | null>(null);
@@ -389,6 +500,26 @@ export default function ScoreCanvas() {
               priority: n.priority,
             })),
           ),
+          // Lo que el documento CONTIENE y lo que se está PINTANDO no tienen por
+          // qué coincidir: al centrarse en una parte se apartan las anotaciones
+          // de las demás. Sin esta pareja de números no se puede comprobar el
+          // filtro desde la consola.
+          focusedPartId: s.focusedPartId,
+          // Con esto se comprueba desde la consola la invariante que sostiene la
+          // transposición: cambiar cómo lee una parte mueve las dos primeras
+          // cifras y no la tercera, y transportar la obra las mueve todas.
+          transposes: {
+            /** Transporte de la obra: lo que se lee y lo que suena. */
+            obra: baseTranspose,
+            /** Cómo lee cada parte: sólo lo que se lee. */
+            lecturas: partTransposes ?? {},
+            /** Lo que declara el propio archivo, en la misma convención. */
+            declarado: declaredReadings(osmdRef.current),
+          },
+          dibujados: drawn.reduce(
+            (total, l) => total + l.strokes.length + l.pins.length + l.notes.length,
+            0,
+          ),
           layers: (s.doc?.layers ?? []).map((l) => ({
             id: l.id,
             name: l.name,
@@ -405,8 +536,16 @@ export default function ScoreCanvas() {
               tool: st.tool,
               width: st.width,
               points: st.points.length,
-              from: st.points[0],
-              to: st.points[st.points.length - 1],
+              // El ancla es la verdad; `points` es sólo la última maquetación.
+              // Ver la posición dibujada, y no la guardada, es lo que permite
+              // comprobar a mano que una transposición no mueve la tinta.
+              anchors: st.anchors?.length ?? 0,
+              // A quién pertenece el trazo, según dónde cayó.
+              partesDe: st.anchors
+                ? [...new Set(st.anchors.map((a) => a.p).filter(Boolean))]
+                : null,
+              guardadoEn: st.points[0],
+              dibujadoEn: strokePoints(st, extent)[0],
             })),
           ),
           // Estado de la sesión y de la sincronización. La sesión NO se incluye
@@ -428,7 +567,7 @@ export default function ScoreCanvas() {
         };
       },
     };
-  }, [extent, layoutWidth]);
+  }, [extent, layoutWidth, drawn, baseTranspose, partTransposes]);
 
   // Cerrar la partitura no debe dejar música sonando: el reproductor es
   // compartido y sobrevive a este componente, así que hay que pararlo aquí.
@@ -536,11 +675,12 @@ export default function ScoreCanvas() {
       state.layers,
       state.activeLayerId,
       store.soloActiveLayer,
+      store.focusedPartId,
     )) {
       if (layer.locked) continue;
       for (const stroke of layer.strokes) {
         if (pendingErase.current.has(stroke.id)) continue;
-        const pts = stroke.points;
+        const pts = strokePoints(stroke, store.extent);
         const hit =
           pts.length === 1
             ? Math.hypot(pts[0].x - x, pts[0].y - y) <= radius + stroke.width / 2
@@ -752,16 +892,17 @@ export default function ScoreCanvas() {
             store.doc?.layers ?? [],
             activeLayerId,
             soloActiveLayer,
+            store.focusedPartId,
           );
           const candidates = collectPins(store.doc?.layers ?? []).filter((entry) =>
             currentLayers.some((l) => l.id === entry.layer.id),
           );
-          const pinHit = pickPin(candidates, point, zoom);
+          const pinHit = pickPin(candidates, pinView, point, zoom);
           if (pinHit) {
             selectPin(pinHit);
             break;
           }
-          const strokeHit = findStrokeAt(currentLayers, point, zoom);
+          const strokeHit = findStrokeAt(currentLayers, point, zoom, store.extent);
           if (strokeHit) {
             selectStroke(strokeHit);
             break;
@@ -780,6 +921,7 @@ export default function ScoreCanvas() {
       extendMeasureSelection,
       markerWidth,
       penWidth,
+      pinView,
       selectMeasure,
       selectPin,
       selectStroke,
@@ -912,6 +1054,9 @@ export default function ScoreCanvas() {
 
   const isDrawingTool = tool === "pencil" || tool === "highlighter";
   const activeLayer = layers.find((l) => l.id === activeLayerId);
+  const focusedPart = focusedPartId
+    ? (parts.find((p) => p.id === focusedPartId) ?? null)
+    : null;
   const lockedDrawing = (activeLayer?.locked ?? false) && isDrawingTool;
   const cursorClass = lockedDrawing
     ? "cursor-not-allowed"
@@ -1014,7 +1159,7 @@ export default function ScoreCanvas() {
                       return (
                         <path
                           key={stroke.id}
-                          d={pressureOutline(stroke.points, stroke.width)}
+                          d={pressureOutline(pointsOf(stroke), stroke.width)}
                           fill={stroke.color ?? layer.color}
                           fillOpacity={stroke.tool === "highlighter" ? 0.3 : 1}
                           style={
@@ -1066,6 +1211,7 @@ export default function ScoreCanvas() {
                     // Un pin de una capa bloqueada se puede leer y seleccionar,
                     // pero no mover: es la misma regla que para los trazos.
                     const movable = tool === "select" && !layer.locked;
+                    const at = pinAt(pin);
                     return (
                       <g
                         key={pin.id}
@@ -1073,7 +1219,7 @@ export default function ScoreCanvas() {
                           if (node) pinNodes.current.set(pin.id, node);
                           else pinNodes.current.delete(pin.id);
                         }}
-                        transform={`translate(${pin.x}, ${pin.y}) scale(${1 / zoom})`}
+                        transform={`translate(${at.x}, ${at.y}) scale(${1 / zoom})`}
                         className={
                           tool === "select"
                             ? movable
@@ -1095,12 +1241,12 @@ export default function ScoreCanvas() {
                           }
                           pinDrag.current = {
                             id: pin.id,
-                            offsetX: point.x - pin.x,
-                            offsetY: point.y - pin.y,
-                            fromX: pin.x,
-                            fromY: pin.y,
-                            x: pin.x,
-                            y: pin.y,
+                            offsetX: point.x - at.x,
+                            offsetY: point.y - at.y,
+                            fromX: at.x,
+                            fromY: at.y,
+                            x: at.x,
+                            y: at.y,
                             moved: false,
                           };
                         }}
@@ -1178,6 +1324,10 @@ export default function ScoreCanvas() {
               <p className="text-muted">{errorMessage}</p>
             </div>
           </div>
+        )}
+
+        {focusedPart && (
+          <FocusPill name={focusedPart.name} onClear={() => setFocusedPartId(null)} />
         )}
 
         <ZoomPill
@@ -1280,6 +1430,29 @@ function NoteMarks({
 /* ------------------------------------------------------------------ */
 /* Subcomponentes                                                      */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Aviso de que la vista está centrada en una parte.
+ *
+ * Hace falta: al centrarse en el saxo, media plantilla desaparece, y sin decir
+ * por qué ni ofrecer la vuelta eso se lee como una partitura rota.
+ */
+function FocusPill({ name, onClear }: { name: string; onClear: () => void }) {
+  return (
+    <div className="no-print pointer-events-auto absolute left-3 top-3 flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full border border-accent/40 bg-white/95 py-0.5 pl-2.5 pr-1 text-xs shadow-sm backdrop-blur">
+      <span className="min-w-0 truncate">
+        <span className="text-muted">Solo </span>
+        <span className="font-medium">{name}</span>
+      </span>
+      <button
+        onClick={onClear}
+        className="touch-target shrink-0 rounded-full px-2 py-1 text-accent-deep hover:bg-accent/[0.08]"
+      >
+        Ver todo
+      </button>
+    </div>
+  );
+}
 
 function ZoomPill({
   zoom,
@@ -1396,6 +1569,8 @@ function CommentComposer({
 
 function pickPin(
   candidates: { pin: { id: string; x: number; y: number } }[],
+  /** Posición resuelta de cada comentario, con la maquetación de ahora. */
+  positions: Map<string, { x: number; y: number }>,
   point: { x: number; y: number },
   zoom: number,
 ): string | null {
@@ -1403,7 +1578,8 @@ function pickPin(
   let best: string | null = null;
   let bestDistance = threshold;
   for (const { pin } of candidates) {
-    const distance = Math.hypot(pin.x - point.x, pin.y - point.y);
+    const at = positions.get(pin.id) ?? pin;
+    const distance = Math.hypot(at.x - point.x, at.y - point.y);
     if (distance <= bestDistance) {
       bestDistance = distance;
       best = pin.id;
@@ -1417,6 +1593,8 @@ function findStrokeAt(
   layers: Layer[],
   point: { x: number; y: number },
   zoom: number,
+  /** Para resolver cada trazo desde su ancla antes de medir distancias. */
+  extent: ScoreExtent,
 ): string | null {
   const slack = 6 / zoom;
   for (let i = layers.length - 1; i >= 0; i--) {
@@ -1425,7 +1603,7 @@ function findStrokeAt(
     for (let j = layer.strokes.length - 1; j >= 0; j--) {
       const stroke = layer.strokes[j];
       const tolerance = slack + stroke.width / 2;
-      const pts = stroke.points;
+      const pts = strokePoints(stroke, extent);
       if (pts.length === 1) {
         if (Math.hypot(pts[0].x - point.x, pts[0].y - point.y) <= tolerance) {
           return stroke.id;

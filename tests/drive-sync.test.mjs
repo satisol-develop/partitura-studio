@@ -13,7 +13,10 @@ import {
 import {
   describeReport,
   EMPTY_SYNC_STATE,
+  loadSyncOwner,
   markDeleted,
+  needsOwnerConfirmation,
+  saveSyncOwner,
   syncWithDrive,
 } from "../lib/sync.ts";
 import { createMockDrive, DEFAULT_USERS } from "../tools/mock-apps-script.mjs";
@@ -400,6 +403,121 @@ test("la subida es idempotente: repetirla no duplica ni cambia nada", async () =
     assert.equal(drive.index().length, 1);
     assert.equal(drive.index()[0].annotationCount, 1);
   });
+});
+
+test("el MusicXML viaja una sola vez, no dentro y fuera del documento", async () => {
+  await withDrive(async ({ config }) => {
+    const doc = makeDoc("score_xml", { updatedAt: 1_700_000_012_000 });
+    let sent = null;
+    const recordingFetch = async (url, init) => {
+      sent = JSON.parse(init.body);
+      return fetch(url, init);
+    };
+
+    await putRemoteScore(config, doc, { fetchImpl: recordingFetch });
+
+    // El documento viaja SIN el XML (que el servidor guarda en su propio
+    // archivo) y el XML viaja en su campo: subirlo en los dos sitios duplicaba
+    // el peso de cada guardado de una partitura grande.
+    assert.equal(sent.document.xml, "");
+    assert.equal(sent.xml, doc.xml);
+    assert.equal(sent.id, doc.meta.id);
+
+    // Y lo que queda en Drive y lo que se vuelve a bajar es la partitura entera.
+    const stored = await getRemoteScore(config, "score_xml");
+    assert.equal(stored.xml, doc.xml);
+  });
+});
+
+test("lo que baja de Drive se sanea antes de guardarse", async () => {
+  await withDrive(async ({ drive, config }) => {
+    const local = makeLocalStore();
+    // Una partitura subida por una versión anterior: sin `fields` en la nota,
+    // sin `notes` en la capa y sin la lista de comentarios. Abrirla así tumbaba
+    // el panel de anotaciones.
+    const old = {
+      meta: { id: "score_old", title: "Antigua", updatedAt: 1_700_000_013_000 },
+      layers: [
+        {
+          id: "layer_1",
+          name: "Mía",
+          notes: [{ id: "note_1", measureIndex: 4, measureNumber: "5" }],
+        },
+        "una capa que no es una capa",
+      ],
+    };
+    drive.seed("score_old", old, XML);
+
+    const first = await syncWithDrive(config, local, EMPTY_SYNC_STATE);
+    assert.deepEqual(first.report.downloaded, ["score_old"]);
+
+    const restored = await local.load("score_old");
+    assert.deepEqual(
+      restored.layers[0].notes[0].fields,
+      { text: "", dynamics: "", articulation: "", fingering: "", technique: "", harmony: "" },
+      "el panel lee estos campos: tienen que existir",
+    );
+    assert.deepEqual(restored.layers[0].strokes, []);
+    assert.equal(restored.layers[0].notes[0].measureEnd, 4, "un tramo sin fin es un compás");
+    assert.equal(restored.layers.length, 1, "lo que no es una capa se descarta entero");
+    assert.equal(restored.xml, XML);
+    assert.equal(restored.meta.updatedAt, 1_700_000_013_000, "la fecha la manda lo que llega");
+
+    // Y no parece nueva: normalizarla no puede provocar que la siguiente pasada
+    // la devuelva como si aquí se hubiera editado.
+    const second = await syncWithDrive(config, local, first.state);
+    assert.equal(second.report.unchanged, 1);
+    assert.deepEqual(second.report.uploaded, []);
+  });
+});
+
+test("el servidor alinea el id del documento con el de la carpeta", async () => {
+  await withDrive(async ({ config }) => {
+    const send = (body) =>
+      fetch(config.endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ session: config.session, ...body }),
+      }).then((response) => response.json());
+
+    // Un documento que dice llamarse de otra manera: vive en la carpeta del id
+    // que manda la petición, así que su `meta.id` se corrige al guardarlo.
+    const put = await send({
+      action: "put",
+      id: "score_z",
+      document: { ...makeDoc("otro_id", { updatedAt: 1_700_000_014_000 }) },
+      xml: XML,
+    });
+    assert.equal(put.ok, true);
+    assert.equal(put.summary.id, "score_z");
+    const stored = await getRemoteScore(config, "score_z");
+    assert.equal(stored.document.meta.id, "score_z");
+
+    // Y un documento sin la forma esperada no llega a escribirse (el doble tiene
+    // que decir lo mismo que el script real: ver `tests/apps-script.test.mjs`).
+    const sinMetadatos = await send({ action: "put", id: "score_y", document: { layers: [] } });
+    assert.equal(sinMetadatos.ok, false);
+    assert.equal(sinMetadatos.code, "bad_request");
+    const sinCapas = await send({ action: "put", id: "score_y", document: { meta: {} } });
+    assert.equal(sinCapas.code, "bad_request");
+    // Y no ha quedado nada guardado: el servidor explica que no está, no devuelve
+    // un documento a medias.
+    await assert.rejects(() => getRemoteScore(config, "score_y"), /no está en Drive/);
+  });
+});
+
+test("la biblioteca de este equipo tiene dueño, y no se sube a otra cuenta sin permiso", () => {
+  // Puro: sin navegador, guardar y leer el dueño no hace nada (y no revienta).
+  assert.equal(loadSyncOwner(), "");
+  saveSyncOwner("ana@ejemplo.com");
+  assert.equal(loadSyncOwner(), "");
+
+  // Con dueño apuntado y otra cuenta delante, hay que preguntar. Sin dueño (una
+  // instalación nueva) o con la misma cuenta, no.
+  assert.equal(needsOwnerConfirmation("ana@ejemplo.com", "otro@ejemplo.com"), true);
+  assert.equal(needsOwnerConfirmation("ana@ejemplo.com", "ana@ejemplo.com"), false);
+  assert.equal(needsOwnerConfirmation("", "otro@ejemplo.com"), false);
+  assert.equal(needsOwnerConfirmation("ana@ejemplo.com", ""), false);
 });
 
 test("describeReport resume el informe en una frase", () => {

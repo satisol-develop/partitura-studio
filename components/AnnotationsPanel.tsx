@@ -4,6 +4,11 @@ import { useMemo, useState } from "react";
 import { CloseIcon } from "./icons";
 import { collectNotes, collectPins, useStore } from "@/lib/store";
 import {
+  BASE_TRANSPOSE_OPTIONS,
+  partTransposeOf,
+  transpositionOptions,
+} from "@/lib/transpose";
+import {
   EMPTY_FIELDS,
   noteRange,
   rangeLabel,
@@ -111,6 +116,12 @@ function PartsSection() {
   const togglePartMuted = useStore((s) => s.togglePartMuted);
   const targetPartId = useStore((s) => s.targetPartId);
   const setTargetPartId = useStore((s) => s.setTargetPartId);
+  const focusedPartId = useStore((s) => s.focusedPartId);
+  const setFocusedPartId = useStore((s) => s.setFocusedPartId);
+  const partTransposes = useStore((s) => s.doc?.meta.partTransposes);
+  const setPartTranspose = useStore((s) => s.setPartTranspose);
+  const baseTranspose = useStore((s) => s.doc?.meta.transpose ?? 0);
+  const setBaseTranspose = useStore((s) => s.setBaseTranspose);
   const [open, setOpen] = useState(true);
 
   // Con una sola parte no hay nada que elegir, así que lo resumimos en una fila.
@@ -137,43 +148,106 @@ function PartsSection() {
 
       {open && parts.length > 0 && (
         <div className="space-y-1 px-2 pb-2">
+          {/* Transporte de la obra: esto sí cambia el tono de todo, lo que se
+              lee y lo que suena. */}
+          <label className="flex items-center gap-1.5 rounded-xl border border-line bg-surface/50 px-2 py-1.5 text-[11px]">
+            <span className="shrink-0 text-muted">Toda la obra</span>
+            <select
+              value={baseTranspose}
+              onChange={(e) => setBaseTranspose(Number(e.target.value))}
+              aria-label="Transporte de toda la obra"
+              className="min-w-0 flex-1 rounded-md border border-line bg-white px-1.5 py-1 text-[11px] outline-none focus:border-accent"
+            >
+              {BASE_TRANSPOSE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
           {parts.map((part) => {
             const muted = mutedParts.includes(part.id);
             const targeted = targetPartId === part.id;
+            const focused = focusedPartId === part.id;
             return (
               <div
                 key={part.id}
-                className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-xs transition-all ${
+                className={`rounded-xl border px-2 py-1.5 text-xs transition-all ${
                   targeted
                     ? "border-accent/60 bg-accent/[0.06] shadow-[0_1px_2px_rgba(28,27,25,0.05)]"
                     : "border-line bg-white hover:shadow-card"
                 }`}
               >
-                <button
-                  onClick={() =>
-                    setTargetPartId(targetPartId === part.id ? null : part.id)
-                  }
-                  title="Atribuir las anotaciones nuevas a esta parte"
-                  className="min-w-0 flex-1 truncate text-left"
-                >
-                  <span className="block truncate font-medium">{part.name}</span>
-                  <span className="block text-[10px] text-muted">
-                    {part.staffIndices.length} pentagrama
-                    {part.staffIndices.length === 1 ? "" : "s"}
-                    {targeted ? " · anotando aquí" : ""}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() =>
+                      setTargetPartId(targetPartId === part.id ? null : part.id)
+                    }
+                    title="Atribuir las anotaciones nuevas a esta parte"
+                    className="min-w-0 flex-1 truncate text-left"
+                  >
+                    <span className="block truncate font-medium">{part.name}</span>
+                    <span className="block text-[10px] text-muted">
+                      {part.staffIndices.length} pentagrama
+                      {part.staffIndices.length === 1 ? "" : "s"}
+                      {targeted ? " · anotando aquí" : ""}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => togglePartMuted(part.id)}
+                    title={muted ? "Volver a sonar" : "Silenciar al reproducir"}
+                    className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] ${
+                      muted
+                        ? "border-amber-300 bg-amber-100 text-amber-900"
+                        : "border-line hover:bg-surface"
+                    }`}
+                  >
+                    {muted ? "silenciada" : "suena"}
+                  </button>
+                </div>
+
+                {/* Cómo lee este instrumento. Es una forma de escribir, no un
+                    cambio de tono: el sonido se queda donde estaba. */}
+                <label className="mt-1 flex items-center gap-1.5">
+                  <span className="sr-only">
+                    Cómo lee {part.name}: transposición de su parte
                   </span>
-                </button>
-                <button
-                  onClick={() => togglePartMuted(part.id)}
-                  title={muted ? "Volver a sonar" : "Silenciar al reproducir"}
-                  className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] ${
-                    muted
-                      ? "border-amber-300 bg-amber-100 text-amber-900"
-                      : "border-line hover:bg-surface"
-                  }`}
-                >
-                  {muted ? "silenciada" : "suena"}
-                </button>
+                  <select
+                    value={partTransposeOf(partTransposes, part.id)}
+                    onChange={(e) => setPartTranspose(part.id, Number(e.target.value))}
+                    className="min-w-0 flex-1 rounded-md border border-line bg-white px-1.5 py-1 text-[11px] outline-none focus:border-accent"
+                  >
+                    {transpositionOptions(partTransposeOf(partTransposes, part.id)).map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.value === 0
+                          ? "Lee en Do · concierto"
+                          : `Lee en ${option.label} · ${option.instruments}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {/* Centrarse en una parte: se dibuja sólo esa, y las anotaciones
+                    de las demás se apartan para poder trabajar en la tuya. */}
+                <div className="mt-1 flex items-center justify-end">
+                  <button
+                    onClick={() => setFocusedPartId(focused ? null : part.id)}
+                    aria-pressed={focused}
+                    title={
+                      focused
+                        ? "Volver a ver toda la plantilla"
+                        : "Ver y anotar sólo esta parte"
+                    }
+                    className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] transition-colors ${
+                      focused
+                        ? "border-accent bg-accent text-white"
+                        : "border-line text-muted hover:bg-surface"
+                    }`}
+                  >
+                    {focused ? "viendo sólo esta" : "sólo esta parte"}
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -733,13 +807,18 @@ function NoteList({
           r.from === selected.from &&
           r.to === selected.to &&
           (note.partId ?? null) === selectedPart;
+        // Cinturón además de tirantes: `normalizeDocument` ya garantiza `fields`
+        // en todo lo que entra de fuera, pero aquí se está leyendo el documento
+        // con la partitura ya abierta y un `fields` que falte no puede tumbar el
+        // panel (ni, con él, todo lo que hay en pantalla).
+        const fields = note.fields ?? EMPTY_FIELDS;
         const summary =
-          note.fields.text ||
+          fields.text ||
           [
-            note.fields.dynamics,
-            note.fields.articulation,
-            note.fields.fingering,
-            note.fields.harmony,
+            fields.dynamics,
+            fields.articulation,
+            fields.fingering,
+            fields.harmony,
           ]
             .filter(Boolean)
             .join(" · ") ||

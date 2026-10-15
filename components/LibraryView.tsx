@@ -6,6 +6,7 @@ import { TRIO_XML } from "@/lib/demo-trio";
 import { importScoreFile } from "@/lib/files";
 import { useStore } from "@/lib/store";
 import {
+  countAnnotations,
   LAYER_PALETTE,
   makeLayer,
   uid,
@@ -42,6 +43,27 @@ const SOURCE_LABELS: Record<ScoreSummary["source"], string> = {
   mxl: "MusicXML comprimido",
   midi: "MIDI",
 };
+
+/**
+ * Aviso antes de reemplazar una partitura por una copia importada.
+ *
+ * Pone delante lo que hace falta para decidir: cuántas anotaciones tiene cada
+ * una y de cuándo es cada una. Sin esos dos datos, «¿reemplazar?» es una
+ * pregunta que no se puede contestar.
+ */
+function confirmOverwrite(
+  existing: ScoreSummary,
+  incoming: ScoreDocument,
+  fileName: string,
+): boolean {
+  const date = (value: number) => new Date(value).toLocaleString("es-ES");
+  return confirm(
+    `Ya tienes «${existing.title}» en este equipo y la copia «${fileName}» lleva su mismo id.\n\n` +
+      `En este equipo: ${existing.annotationCount} anotaciones, del ${date(existing.updatedAt)}\n` +
+      `En la copia: ${countAnnotations(incoming.layers)} anotaciones, del ${date(incoming.meta.updatedAt)}\n\n` +
+      "¿Reemplazar la que hay? Se perderá tal y como está ahora.",
+  );
+}
 
 /**
  * Tinta de la tarjeta, derivada del id para que no baile al reordenar la lista.
@@ -99,6 +121,12 @@ export default function LibraryView() {
       for (const file of Array.from(files)) {
         const { doc, warnings: fileWarnings } = await importScoreFile(file);
         collected.push(...fileWarnings);
+        // Una copia .json conserva el id de su partitura, así que importarla
+        // REEMPLAZA la que ya haya con ese id. Se pregunta antes: reemplazar en
+        // silencio una partitura con más trabajo que la copia es perder trabajo,
+        // y el aviso lleva los dos números para poder decidir.
+        const existing = library.find((score) => score.id === doc.meta.id);
+        if (existing && !confirmOverwrite(existing, doc, file.name)) continue;
         await createScore(doc);
         await openScore(doc.meta.id);
       }

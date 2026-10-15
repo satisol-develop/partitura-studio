@@ -323,7 +323,12 @@ export async function putRemoteScore(
     {
       action: "put",
       id: doc.meta.id,
-      document: doc,
+      // El MusicXML viaja en su propio campo porque el servidor lo guarda en su
+      // propio archivo (`score.musicxml`, abrible desde Drive sin la
+      // aplicación). Mandarlo ADEMÁS dentro del documento lo subía dos veces
+      // —una partitura de 8 MB eran 16 MB de subida en cada guardado— y no
+      // había nadie que leyera esa copia.
+      document: { ...doc, xml: "" },
       xml: doc.xml,
     },
     options,

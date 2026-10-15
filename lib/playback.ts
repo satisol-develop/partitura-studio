@@ -66,6 +66,17 @@ interface RawTie {
   Duration?: RawFraction;
 }
 
+/**
+ * Un instrumento del archivo. `PlaybackTranspose` no es nuestro: lo escribe el
+ * cargador a partir del `<transpose>` de la parte, y es lo que relaciona sus
+ * notas escritas con lo que suenan.
+ */
+interface RawInstrument {
+  IdString?: string;
+  Id?: string;
+  PlaybackTranspose?: number;
+}
+
 interface RawNote {
   Pitch?: RawPitch;
   Length?: RawFraction;
@@ -73,7 +84,7 @@ interface RawNote {
   isRest?: () => boolean;
   getAbsoluteTimestamp?: () => RawFraction;
   NoteTie?: RawTie;
-  ParentStaff?: { ParentInstrument?: { IdString?: string; Id?: string } };
+  ParentStaff?: { ParentInstrument?: RawInstrument };
 }
 
 interface RawVoiceEntry {
@@ -171,10 +182,37 @@ function partIdOf(note: RawNote): string | null {
 }
 
 /**
+ * Cuántos semitonos hay que sumar a la altura que trae la nota para que suene
+ * lo que tiene que sonar.
+ *
+ * Son dos cosas, y las dos importan por separado:
+ *
+ *  - `PlaybackTranspose` es lo que el archivo declara de la parte: un clarinete
+ *    en Si♭ que escribe Do suena Si♭, y el archivo lo dice con −2. Se aplica
+ *    porque las notas de origen son las **escritas**, así que sin esto un saxo
+ *    sonaría una sexta por encima de lo que suena.
+ *  - `base` es el transporte de la obra: eso sí es música, y mueve el papel y
+ *    el sonido a la vez.
+ *
+ * Lo que NO aparece aquí es cómo lee cada parte (`Instrument.Transpose`):
+ * cambiar la notación de un instrumento no puede cambiar el tono de la música.
+ * Si algún día alguien mete esa suma aquí, se rompe justo la invariante que
+ * sostiene la función de transposición, y esta línea es el sitio donde mirarlo.
+ */
+function soundingOffset(instrument: RawInstrument | undefined, base: number): number {
+  return (instrument?.PlaybackTranspose ?? 0) + base;
+}
+
+/**
  * Construye la línea de tiempo de reproducción a partir de la partitura ya
  * cargada en OSMD.
+ *
+ * `base` es el transporte de la obra en semitonos. Se pasa aparte y no se lee
+ * del documento porque OSMD tampoco lo aplica a las alturas de origen —sólo al
+ * dibujo—, así que si no se sumara aquí la pieza se leería en otro tono y
+ * sonaría en el de siempre, que es el fallo que esta línea evita.
  */
-export function buildTimeline(osmd: unknown): PlaybackTimeline {
+export function buildTimeline(osmd: unknown, base = 0): PlaybackTimeline {
   const owner = osmd as OSMDOwner;
   const sheet = owner.Sheet;
   const measures = sheet?.SourceMeasures ?? [];
@@ -231,8 +269,9 @@ export function buildTimeline(osmd: unknown): PlaybackTimeline {
             const tie = note.NoteTie;
             if (tie && tie.StartNote && tie.StartNote !== note) continue;
 
-            const midi = midiOf(note.Pitch);
-            if (midi == null) continue;
+            const written = midiOf(note.Pitch);
+            if (written == null) continue;
+            const midi = written + soundingOffset(note.ParentStaff?.ParentInstrument, base);
 
             const onsetWhole = num(note.getAbsoluteTimestamp?.(), measureWhole);
             let lengthWhole = num(note.Length, 0);

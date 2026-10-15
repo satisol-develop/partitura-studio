@@ -40,6 +40,9 @@ export const DEFAULT_USERS = [
 
 const SESSION_DAYS = 30;
 const MAX_ATTEMPTS = 8;
+/** Los mismos topes que `apps-script/Code.gs` (ver allí por qué existen). */
+const MAX_DOCUMENT_CHARS = 20 * 1024 * 1024;
+const MAX_XML_CHARS = 20 * 1024 * 1024;
 
 function json(response, payload) {
   const body = JSON.stringify(payload);
@@ -277,7 +280,13 @@ export function createMockDrive({
             json(response, { ok: false, error: "Esa partitura no está en Drive.", code: "not_found" });
             return;
           }
-          json(response, { ok: true, document: stored.document, xml: stored.xml });
+          // Copia, como el script real: allí el documento se lee de un archivo,
+          // así que lo que devuelve nunca es el mismo objeto que se guardó.
+          json(response, {
+            ok: true,
+            document: structuredClone(stored.document),
+            xml: stored.xml,
+          });
           return;
         }
         case "put": {
@@ -289,12 +298,41 @@ export function createMockDrive({
             });
             return;
           }
+          const document = payload.document;
+          if (typeof document.meta !== "object" || document.meta === null) {
+            json(response, {
+              ok: false,
+              error: "El documento no trae sus metadatos (meta).",
+              code: "bad_request",
+            });
+            return;
+          }
+          if (!Array.isArray(document.layers)) {
+            json(response, {
+              ok: false,
+              error: "El documento no trae sus capas de anotación (layers).",
+              code: "bad_request",
+            });
+            return;
+          }
+          // El id de la carpeta manda: el documento tiene que decir lo mismo.
+          document.meta.id = payload.id;
+          const xml = typeof payload.xml === "string" ? payload.xml : "";
+          const serialized = JSON.stringify(document);
+          if (xml.length > MAX_XML_CHARS || serialized.length > MAX_DOCUMENT_CHARS) {
+            json(response, {
+              ok: false,
+              error: "El documento o el MusicXML son demasiado grandes para esta instalación.",
+              code: "bad_request",
+            });
+            return;
+          }
           const previous = scores.get(payload.id);
           scores.set(payload.id, {
-            document: payload.document,
-            xml: typeof payload.xml === "string" ? payload.xml : (previous?.xml ?? ""),
+            document: JSON.parse(serialized),
+            xml: xml || (previous?.xml ?? ""),
           });
-          const summary = summarize(payload.id, payload.document);
+          const summary = summarize(payload.id, document);
           index = [...index.filter((s) => s.id !== summary.id), summary].sort(
             (a, b) => b.updatedAt - a.updatedAt,
           );
@@ -339,8 +377,12 @@ export function createMockDrive({
         },
         /** Mete una partitura a mano, como si la hubiera subido otro equipo. */
         seed(id, document, xml = "") {
-          scores.set(id, { document, xml });
-          const summary = summarize(id, document);
+          // Copia, como si el documento hubiera pasado por un archivo (que es lo
+          // que hace el script real): así una prueba no puede tocar sin querer lo
+          // que hay «en Drive» por tener una referencia al mismo objeto.
+          const copy = JSON.parse(JSON.stringify(document));
+          scores.set(id, { document: copy, xml });
+          const summary = summarize(id, copy);
           index = [...index.filter((s) => s.id !== summary.id), summary];
         },
         /**
