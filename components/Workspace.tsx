@@ -5,6 +5,7 @@ import DriveDialog from "./DriveDialog";
 import LibraryView from "./LibraryView";
 import LoginView from "./LoginView";
 import ScoreView from "./ScoreView";
+import { LogoMark } from "./Logo";
 import { hasValidSession, loginRequired } from "@/lib/auth";
 import { getSharedPlayer } from "@/lib/playback";
 import { useStore } from "@/lib/store";
@@ -151,13 +152,21 @@ export default function Workspace() {
   }, []);
 
   if (!ready) {
+    // Un segundo escaso, sí, pero es la primera impresión de la aplicación y
+    // antes era una palabra suelta sobre gris. La marca y el latido ocupan lo
+    // mismo que ocupaba el texto, así que no retrasa nada.
     return (
       <div
-        className="grid min-h-screen place-items-center text-sm text-muted"
+        className="grid min-h-screen place-items-center bg-surface"
         role="status"
         aria-live="polite"
       >
-        Cargando…
+        <div className="flex flex-col items-center gap-3">
+          <span className="animate-pulse">
+            <LogoMark size={44} />
+          </span>
+          <span className="text-xs tracking-wide text-muted">Cargando…</span>
+        </div>
       </div>
     );
   }

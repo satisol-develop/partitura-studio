@@ -118,3 +118,207 @@ export function EyeOffIcon({ size = 15, className }: IconProps) {
     </svg>
   );
 }
+
+/* ---------------------------------------------------------------- */
+/* Iconos de la biblioteca y de la pantalla de acceso               */
+/* ---------------------------------------------------------------- */
+
+/** Importar: una flecha que entra en una bandeja. */
+export function UploadIcon({ size = 17, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M12 15.5V4" />
+      <path d="M7.5 8.5 12 4l4.5 4.5" />
+      <path d="M4.5 15v3.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V15" />
+    </svg>
+  );
+}
+
+/** Empezar de cero / añadir. */
+export function PlusIcon({ size = 17, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+/** Drive: una carpeta, que es lo que se comparte. */
+export function FolderIcon({ size = 17, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h3.2a2 2 0 0 1 1.6.8l1 1.2H18a2.5 2.5 0 0 1 2.5 2.5v6.5A2.5 2.5 0 0 1 18 18.5H6A2.5 2.5 0 0 1 3.5 16v-8.5Z" />
+    </svg>
+  );
+}
+
+/** Eliminar. */
+export function TrashIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M4 7h16" />
+      <path d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7" />
+      <path d="M6.5 7l.8 11.2A1.9 1.9 0 0 0 9.2 20h5.6a1.9 1.9 0 0 0 1.9-1.8L17.5 7" />
+      <path d="M10.5 11v5M13.5 11v5" />
+    </svg>
+  );
+}
+
+/** Partitura: corchea con su plica, la marca de una pieza en la lista. */
+export function MusicIcon({ size = 20, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M9 18V6.5l9-2v11.5" />
+      <circle cx="6.5" cy="18" r="2.5" />
+      <circle cx="15.5" cy="16" r="2.5" />
+    </svg>
+  );
+}
+
+/** Salir de la sesión. */
+export function LogoutIcon({ size = 15, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M14 4.5h3.5a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5H14" />
+      <path d="M10 8l-4 4 4 4" />
+      <path d="M6 12h9" />
+    </svg>
+  );
+}
+
+/** Ejemplo / plantilla con la que empezar. */
+export function SparkIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M12 4.5 13.6 9l4.4 1.6L13.6 12 12 16.5 10.4 12 6 10.6 10.4 9 12 4.5Z" />
+      <path d="M18.5 4v2.4M17.3 5.2h2.4" />
+    </svg>
+  );
+}
+
+/** Capas, el eje de la aplicación. */
+export function LayersIcon({ size = 17, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M12 4 3.5 8.5 12 13l8.5-4.5L12 4Z" />
+      <path d="M3.5 13 12 17.5 20.5 13" />
+    </svg>
+  );
+}
+
+/** Comprobado: la marca de la buena señal, sin emoji. */
+export function CheckIcon({ size = 14, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M5 12.5 10 17.5 19 7" />
+    </svg>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Iconos del editor                                                 */
+/* ---------------------------------------------------------------- */
+
+export function UndoIcon({ size = 17, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M9 7.5H15a4.5 4.5 0 0 1 0 9h-1" />
+      <path d="M11.5 4.5 9 7.5l2.5 3" />
+    </svg>
+  );
+}
+
+export function RedoIcon({ size = 17, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M15 7.5H9a4.5 4.5 0 0 0 0 9h1" />
+      <path d="M12.5 4.5 15 7.5l-2.5 3" />
+    </svg>
+  );
+}
+
+export function CloseIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
+export function DownloadIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M12 4v10.5" />
+      <path d="M7.5 10 12 14.5 16.5 10" />
+      <path d="M4.5 17.5V19a1.5 1.5 0 0 0 1.5 1.5h12A1.5 1.5 0 0 0 19.5 19v-1.5" />
+    </svg>
+  );
+}
+
+/** Sincronizar: dos arcos en círculo, con la punta marcada. */
+export function SyncIcon({ size = 15, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M19.5 12a7.5 7.5 0 0 1-12.8 5.3" />
+      <path d="M4.5 12A7.5 7.5 0 0 1 17.3 6.7" />
+      <path d="M17.6 3.2v3.5H14" />
+      <path d="M6.4 20.8v-3.5H10" />
+    </svg>
+  );
+}
+
+export function ArrowLeftIcon({ size = 15, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M19 12H5" />
+      <path d="M11 6 5 12l6 6" />
+    </svg>
+  );
+}
+
+export function ChevronDownIcon({ size = 14, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="m6 9.5 6 6 6-6" />
+    </svg>
+  );
+}
+
+/* Los tres del transporte van rellenos y sin trazo: en un botón pequeño, un
+   contorno de play se lee peor que la silueta maciza. */
+
+function solid(size: number, className?: string) {
+  return {
+    width: size,
+    height: size,
+    viewBox: "0 0 12 12",
+    fill: "currentColor",
+    className,
+    "aria-hidden": true,
+  } as const;
+}
+
+export function PlayIcon({ size = 13, className }: IconProps) {
+  return (
+    <svg {...solid(size, className)}>
+      <path d="M2.5 1.4 10.4 6l-7.9 4.6V1.4Z" />
+    </svg>
+  );
+}
+
+export function PauseIcon({ size = 13, className }: IconProps) {
+  return (
+    <svg {...solid(size, className)}>
+      <rect x="2.2" y="1.4" width="3" height="9.2" rx="0.9" />
+      <rect x="6.8" y="1.4" width="3" height="9.2" rx="0.9" />
+    </svg>
+  );
+}
+
+export function StopIcon({ size = 12, className }: IconProps) {
+  return (
+    <svg {...solid(size, className)}>
+      <rect x="2" y="2" width="8" height="8" rx="1.4" />
+    </svg>
+  );
+}

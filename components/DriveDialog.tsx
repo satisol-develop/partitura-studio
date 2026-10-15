@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { hasValidSession } from "@/lib/auth";
 import { BUILD_ENDPOINT, normalizeEndpoint } from "@/lib/drive";
 import { useStore } from "@/lib/store";
+import { CloseIcon, SyncIcon } from "./icons";
 
 /**
  * Ajustes de la sincronización con Drive.
@@ -108,7 +109,7 @@ function DriveDialogBody() {
   return (
     <div className="no-print fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-6">
       <div
-        className="absolute inset-0 bg-ink/40"
+        className="absolute inset-0 bg-ink/45 backdrop-blur-[2px]"
         onClick={() => setDrivePanelOpen(false)}
         aria-hidden
       />
@@ -117,11 +118,11 @@ function DriveDialogBody() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="drive-dialog-title"
-        className="thin-scroll relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-line bg-white p-4 shadow-2xl sm:rounded-2xl"
+        className="rise-in thin-scroll relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-white p-4 shadow-pop sm:rounded-3xl sm:p-5"
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <h2 id="drive-dialog-title" className="text-base font-semibold">
+            <h2 id="drive-dialog-title" className="text-base font-semibold tracking-tight">
               Sincronización con Drive
             </h2>
             <p className="mt-0.5 text-[11px] leading-relaxed text-muted">
@@ -132,16 +133,17 @@ function DriveDialogBody() {
           </div>
           <button
             onClick={() => setDrivePanelOpen(false)}
-            className="shrink-0 rounded-lg border border-line px-2 py-1 text-xs hover:bg-surface"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:bg-surface hover:text-ink"
             aria-label="Cerrar ajustes"
+            title="Cerrar"
           >
-            Cerrar
+            <CloseIcon size={15} />
           </button>
         </div>
 
         <div className="space-y-3">
           {signedIn ? (
-            <div className="rounded-lg border border-line bg-surface p-2.5">
+            <div className="rounded-xl border border-line bg-surface p-3">
               <p className="text-xs">
                 Has entrado como <b>{auth.email}</b>.
               </p>
@@ -158,15 +160,16 @@ function DriveDialogBody() {
                 <button
                   onClick={() => void testDrive()}
                   disabled={status === "working"}
-                  className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-medium hover:bg-surface disabled:opacity-50"
+                  className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-medium transition-colors hover:bg-surface disabled:opacity-50"
                 >
                   Probar conexión
                 </button>
                 <button
                   onClick={() => void syncNow()}
                   disabled={status === "working"}
-                  className="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                  className="flex items-center gap-1.5 rounded-lg bg-gradient-to-b from-ink to-ink-soft px-3 py-1.5 text-xs font-semibold text-white shadow-[0_8px_18px_-12px_rgba(28,27,25,0.9)] transition-all disabled:opacity-40 disabled:shadow-none"
                 >
+                  <SyncIcon size={13} className={status === "working" ? "animate-spin" : undefined} />
                   {status === "working" ? "Sincronizando…" : "Sincronizar ahora"}
                 </button>
                 <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted">
@@ -183,14 +186,14 @@ function DriveDialogBody() {
                     doSignOut();
                     setDrivePanelOpen(false);
                   }}
-                  className="ml-auto rounded-lg border border-line px-2 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                  className="ml-auto rounded-lg border border-line bg-white px-2 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
                 >
                   Salir
                 </button>
               </div>
             </div>
           ) : (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] leading-relaxed text-amber-900">
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-900">
               No hay sesión: las partituras de este equipo se pueden usar, pero
               no se sincronizan con Drive. Sal y entra con tu correo para
               volver a la carpeta compartida.
@@ -231,7 +234,7 @@ function DriveDialogBody() {
           )}
 
           <div
-            className={`rounded-lg border p-2 text-xs ${statusStyles[status] ?? statusStyles.idle}`}
+            className={`rounded-xl border p-2.5 text-xs ${statusStyles[status] ?? statusStyles.idle}`}
             role="status"
             aria-live="polite"
             aria-atomic="true"

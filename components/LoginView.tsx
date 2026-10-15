@@ -5,7 +5,14 @@ import { normalizeEndpoint } from "@/lib/drive";
 import { LAYER_PALETTE } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { Logo, PaletteStrip } from "./Logo";
-import { EyeIcon, EyeOffIcon } from "./icons";
+import {
+  CheckIcon,
+  CommentIcon,
+  EyeIcon,
+  EyeOffIcon,
+  LayersIcon,
+  MeasureNoteIcon,
+} from "./icons";
 
 /**
  * Pantalla de acceso.
@@ -35,20 +42,68 @@ import { EyeIcon, EyeOffIcon } from "./icons";
 const CAPACIDADES = [
   {
     color: LAYER_PALETTE[0],
+    Icon: LayersIcon,
     titulo: "Capas independientes",
     texto: "Tu digitación, la corrección del director y el análisis armónico, sin pisarse.",
   },
   {
     color: LAYER_PALETTE[3],
+    Icon: MeasureNoteIcon,
     titulo: "Datos por compás",
     texto: "Cifras, dinámica y prioridad de estudio, además de dibujar encima.",
   },
   {
     color: LAYER_PALETTE[1],
+    Icon: CommentIcon,
     titulo: "Comentarios anclados",
     texto: "Un hilo de conversación en el punto exacto de la partitura.",
   },
 ];
+
+/**
+ * Pentagrama de fondo del panel de marca.
+ *
+ * Es decoración, no contenido: `aria-hidden` y en opacidad baja para que no
+ * compita con el formulario. Sirve para que el panel oscuro se lea como una
+ * partitura anotada —barras de compás, una banda de resaltador, un trazo y un
+ * pin— en vez de como un rectángulo de color.
+ */
+function StaffBackdrop() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 640 360"
+      preserveAspectRatio="xMidYMid slice"
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-[58%] w-full"
+    >
+      <g stroke={LAYER_PALETTE[0]} strokeOpacity="0.22" strokeWidth="1.4">
+        {[120, 136, 152, 168, 184].map((y) => (
+          <line key={y} x1="-20" y1={y} x2="660" y2={y} />
+        ))}
+      </g>
+      {/* Barras de compás. */}
+      <g stroke={LAYER_PALETTE[0]} strokeOpacity="0.2" strokeWidth="1.6">
+        {[40, 240, 440, 620].map((x) => (
+          <line key={x} x1={x} y1="112" x2={x} y2="192" />
+        ))}
+      </g>
+      {/* Banda de resaltador sobre un tramo. */}
+      <rect x="244" y="150" width="190" height="20" rx="10" fill={LAYER_PALETTE[2]} opacity="0.16" />
+      {/* Trazo a mano alzada. */}
+      <path
+        d="M46 176c40 12 62-52 104-58 46-6 60 34 104 26 40-8 56-44 96-40"
+        fill="none"
+        stroke={LAYER_PALETTE[0]}
+        strokeOpacity="0.5"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+      {/* Pin de comentario. */}
+      <circle cx="462" cy="158" r="16" fill="none" stroke={LAYER_PALETTE[1]} strokeOpacity="0.32" strokeWidth="2" />
+      <circle cx="462" cy="158" r="8" fill={LAYER_PALETTE[1]} opacity="0.55" />
+    </svg>
+  );
+}
 
 export default function LoginView() {
   const auth = useStore((s) => s.auth);
@@ -101,21 +156,38 @@ export default function LoginView() {
   return (
     <div className="app-height safe-top safe-bottom thin-scroll overflow-y-auto bg-paper lg:grid lg:grid-cols-[1.05fr_1fr]">
       {/* ------------------------------------------------ panel de marca */}
-      <section className="relative isolate overflow-hidden bg-gradient-to-br from-ink to-ink-soft px-6 pt-8 pb-7 text-paper lg:flex lg:flex-col lg:justify-between lg:px-12 lg:py-14">
+      <section className="relative isolate overflow-hidden bg-gradient-to-br from-ink via-ink to-ink-soft px-6 pt-9 pb-8 text-paper lg:flex lg:flex-col lg:justify-between lg:px-12 lg:py-14">
         {/* Un resplandor en dos tintas de la paleta: da profundidad sin
             competir con el formulario, que es lo que hay que leer. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 opacity-[0.5]"
+          className="pointer-events-none absolute inset-0 -z-10"
           style={{
-            background: `radial-gradient(38rem 26rem at 12% -8%, ${LAYER_PALETTE[0]}33, transparent 62%), radial-gradient(30rem 22rem at 92% 108%, ${LAYER_PALETTE[5]}26, transparent 60%)`,
+            background: `radial-gradient(40rem 28rem at 8% -10%, ${LAYER_PALETTE[0]}40, transparent 62%), radial-gradient(32rem 24rem at 96% 112%, ${LAYER_PALETTE[5]}30, transparent 58%), radial-gradient(24rem 18rem at 82% 8%, ${LAYER_PALETTE[2]}1f, transparent 60%)`,
+          }}
+        />
+        <StaffBackdrop />
+        {/* Rejilla finísima: quita el aire de superficie plana sin dibujar nada
+            que se pueda confundir con contenido. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 opacity-[0.06]"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)",
+            backgroundSize: "26px 26px",
           }}
         />
 
-        <div>
-          <Logo variant="paper" size={40} />
+        <div className="relative">
+          <Logo variant="paper" size={42} />
 
-          <h1 className="mt-7 max-w-md text-3xl font-semibold tracking-tight text-balance lg:mt-10 lg:text-4xl">
+          <span className="mt-8 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-light">
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent-light" />
+            Anotación musical por capas
+          </span>
+
+          <h1 className="mt-4 max-w-md bg-gradient-to-br from-paper via-paper to-paper/60 bg-clip-text text-3xl font-semibold tracking-tight text-balance text-transparent lg:text-[2.7rem] lg:leading-[1.08]">
             Anota la música, no la página
           </h1>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-paper/70">
@@ -125,19 +197,24 @@ export default function LoginView() {
 
           {/* En un móvil, la lista se come la pantalla antes de llegar al
               formulario; a partir de tableta es donde aporta. */}
-          <ul className="mt-8 hidden max-w-md space-y-4 lg:block">
+          <ul className="mt-8 hidden max-w-md space-y-2.5 lg:block">
             {CAPACIDADES.map((capacidad) => (
-              <li key={capacidad.titulo} className="flex gap-3">
+              <li
+                key={capacidad.titulo}
+                className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 transition-colors hover:border-white/20 hover:bg-white/[0.07]"
+              >
                 <span
                   aria-hidden="true"
-                  className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: capacidad.color }}
-                />
+                  className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-white/10"
+                  style={{ backgroundColor: `${capacidad.color}2e`, color: capacidad.color }}
+                >
+                  <capacidad.Icon size={16} />
+                </span>
                 <span className="min-w-0">
                   <span className="block text-[13px] font-medium">
                     {capacidad.titulo}
                   </span>
-                  <span className="block text-xs leading-relaxed text-paper/60">
+                  <span className="mt-0.5 block text-xs leading-relaxed text-paper/60">
                     {capacidad.texto}
                   </span>
                 </span>
@@ -146,9 +223,9 @@ export default function LoginView() {
           </ul>
         </div>
 
-        <div className="mt-8 lg:mt-0">
+        <div className="relative mt-9 lg:mt-0">
           <PaletteStrip />
-          <p className="mt-2 text-[11px] leading-relaxed text-paper/55">
+          <p className="mt-2 max-w-sm text-[11px] leading-relaxed text-paper/55">
             Ocho tintas, una por capa. Se ocultan, se reordenan y se recolorean
             por separado.
           </p>
@@ -156,10 +233,19 @@ export default function LoginView() {
       </section>
 
       {/* --------------------------------------------------- formulario */}
-      <section className="flex flex-1 items-start justify-center px-6 py-10 lg:items-center lg:px-12">
-        <div className="w-full max-w-sm">
+      <section className="relative flex flex-1 items-start justify-center overflow-hidden px-6 py-10 lg:items-center lg:px-12">
+        {/* El lado claro también respira: un halo tenue de acento detrás de la
+            tarjeta, que es la única cosa con relieve de este panel. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 opacity-70"
+          style={{
+            background: `radial-gradient(30rem 22rem at 78% -6%, ${LAYER_PALETTE[0]}14, transparent 64%), radial-gradient(26rem 20rem at 6% 106%, ${LAYER_PALETTE[4]}12, transparent 60%)`,
+          }}
+        />
+        <div className="rise-in w-full max-w-sm">
           <header className="mb-5">
-            <h2 className="text-xl font-semibold tracking-tight">Entrar</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">Entrar</h2>
             <p className="mt-1.5 text-xs leading-relaxed text-muted">
               El acceso lo concede quien administra la instalación: hay una
               lista de correos autorizados y no se puede entrar con otro.
@@ -168,8 +254,13 @@ export default function LoginView() {
 
           <form
             onSubmit={submit}
-            className="space-y-3.5 rounded-2xl border border-line bg-white p-4 shadow-[0_1px_2px_rgba(28,27,25,0.04),0_12px_28px_-18px_rgba(28,27,25,0.25)]"
+            className="relative space-y-3.5 overflow-hidden rounded-2xl border border-line bg-white p-4 shadow-lift"
           >
+            {/* Filete de acento: la firma de la marca sobre la tarjeta. */}
+            <span
+              aria-hidden="true"
+              className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-accent via-accent-light to-accent"
+            />
             {needsEndpoint && (
               <div className="space-y-1.5">
                 <label
@@ -263,7 +354,7 @@ export default function LoginView() {
             <button
               type="submit"
               disabled={busy}
-              className="w-full rounded-xl bg-accent-deep px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-deep-hover disabled:opacity-60"
+              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-accent to-accent-deep px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_-12px_rgba(24,88,196,0.85)] transition-all hover:from-accent-deep hover:to-accent-deep-hover hover:shadow-[0_14px_26px_-12px_rgba(24,88,196,0.9)] active:translate-y-px disabled:opacity-60 disabled:shadow-none"
             >
               {busy ? "Comprobando…" : "Entrar"}
             </button>
@@ -308,11 +399,22 @@ export default function LoginView() {
             </div>
           )}
 
-          <p className="mt-6 text-[11px] leading-relaxed text-muted">
-            Tus anotaciones se guardan primero en este navegador, así que puedes
-            anotar sin conexión. La sesión es para leer y escribir la carpeta
-            compartida de Drive.
-          </p>
+          <ul className="mt-6 space-y-2 text-[11px] leading-relaxed text-muted">
+            <li className="flex items-start gap-2">
+              <CheckIcon size={13} className="mt-0.5 shrink-0 text-accent-deep" />
+              <span>
+                Se guarda primero <b className="text-ink">en este navegador</b>,
+                así que puedes anotar sin conexión.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckIcon size={13} className="mt-0.5 shrink-0 text-accent-deep" />
+              <span>
+                La sesión es sólo para leer y escribir la carpeta compartida de
+                Drive.
+              </span>
+            </li>
+          </ul>
         </div>
       </section>
     </div>

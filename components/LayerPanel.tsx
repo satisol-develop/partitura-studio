@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { EyeIcon, EyeOffIcon, LockIcon, UnlockIcon } from "./icons";
+import { ChevronDownIcon, EyeIcon, EyeOffIcon, LockIcon, PlusIcon, UnlockIcon } from "./icons";
 import { useStore } from "@/lib/store";
 import { colorName, LAYER_PALETTE, type Layer } from "@/lib/types";
 
@@ -32,18 +32,18 @@ export default function LayerPanel() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-line bg-surface/50 px-3 py-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
           Capas
         </h2>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={toggleSolo}
             title="Mostrar sólo la capa activa"
-            className={`rounded-md px-2 py-1 text-[11px] ${
+            className={`rounded-lg px-2 py-1 text-[11px] font-medium transition-colors ${
               soloActiveLayer
                 ? "bg-ink text-white"
-                : "border border-line hover:bg-surface"
+                : "border border-line bg-white hover:bg-surface"
             }`}
           >
             Solo activa
@@ -51,14 +51,15 @@ export default function LayerPanel() {
           <button
             onClick={() => addLayer()}
             title="Nueva capa"
-            className="rounded-md border border-line px-2 py-1 text-[11px] hover:bg-surface"
+            className="flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-[11px] font-medium transition-colors hover:bg-surface"
           >
-            + Añadir
+            <PlusIcon size={13} />
+            Añadir
           </button>
         </div>
       </div>
 
-      <div className="thin-scroll flex-1 space-y-1.5 overflow-y-auto px-2 pb-3">
+      <div className="thin-scroll flex-1 space-y-1.5 overflow-y-auto p-2">
         {ordered.map((layer) => (
           <LayerRow
             key={layer.id}
@@ -123,10 +124,10 @@ function LayerRow({
   return (
     <div
       onClick={onSelect}
-      className={`group cursor-pointer rounded-xl border p-2 transition ${
+      className={`group cursor-pointer rounded-xl border p-2 transition-all duration-150 ${
         active
-          ? "border-accent/60 bg-accent/[0.06]"
-          : "border-line bg-white hover:border-line/80"
+          ? "border-accent/60 bg-accent/[0.06] shadow-[0_1px_2px_rgba(28,27,25,0.05)]"
+          : "border-line bg-white hover:-translate-y-px hover:shadow-card"
       }`}
     >
       <div className="flex items-center gap-1.5">
@@ -145,7 +146,7 @@ function LayerRow({
         </button>
 
         <span
-          className="h-3.5 w-3.5 shrink-0 rounded-full"
+          className="h-3.5 w-3.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
           style={{ background: layer.color }}
           title={colorName(layer.color)}
           aria-hidden
@@ -201,21 +202,21 @@ function LayerRow({
             e.stopPropagation();
             setMenu((v) => !v);
           }}
-          className="touch-visible grid h-6 w-6 shrink-0 place-items-center rounded text-sm leading-none text-muted opacity-0 hover:bg-surface group-hover:opacity-100 focus-visible:opacity-100"
+          className="touch-visible grid h-6 w-6 shrink-0 place-items-center rounded text-muted opacity-0 hover:bg-surface group-hover:opacity-100 focus-visible:opacity-100"
           title="Más opciones"
           aria-expanded={menu}
           aria-label="Más opciones de la capa"
         >
-          ⋯
+          <ChevronDownIcon size={14} className={menu ? "rotate-180" : ""} />
         </button>
       </div>
 
       {menu && (
         <div
-          className="mt-2 space-y-1 border-t border-line pt-2 text-xs"
+          className="rise-in mt-2 space-y-2 rounded-xl border border-line bg-surface/60 p-2 text-xs"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-1 pb-1">
+          <div className="flex items-center gap-1">
             {LAYER_PALETTE.map((color) => (
               <button
                 key={color}
@@ -245,7 +246,7 @@ function LayerRow({
             <span className="tabular-nums">{Math.round(layer.opacity * 100)}%</span>
           </label>
 
-          <div className="flex flex-wrap gap-1 pt-1">
+          <div className="flex flex-wrap gap-1">
             <MenuButton onClick={onUp}>Subir</MenuButton>
             <MenuButton onClick={onDown}>Bajar</MenuButton>
             <MenuButton onClick={onDuplicate}>Duplicar</MenuButton>
@@ -295,7 +296,7 @@ function MenuButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-md border border-line px-2 py-1 disabled:opacity-40 ${
+      className={`rounded-lg border border-line bg-white px-2 py-1 font-medium transition-colors disabled:opacity-40 ${
         danger ? "text-red-600 hover:bg-red-50" : "hover:bg-surface"
       }`}
     >

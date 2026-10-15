@@ -47,7 +47,7 @@ export default function AnnotationsPanel() {
       <div
         role="tablist"
         aria-label="Secciones del panel de anotaciones"
-        className="flex items-center gap-1 border-b border-line px-2 py-1.5"
+        className="flex items-center gap-1 border-b border-line bg-surface/50 px-2 py-1.5"
         onKeyDown={onTabKeyDown}
       >
         <TabButton
@@ -102,10 +102,10 @@ function PartsSection() {
   const single = parts.length <= 1;
 
   return (
-    <div className="border-b border-line bg-surface/60">
+    <div className="border-b border-line bg-white">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-3 py-2 text-left"
+        className="flex w-full items-center justify-between px-3 py-2 text-left transition-colors hover:bg-surface/60"
       >
         <span className="text-xs font-semibold uppercase tracking-wide text-muted">
           Plantilla
@@ -128,8 +128,10 @@ function PartsSection() {
             return (
               <div
                 key={part.id}
-                className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs ${
-                  targeted ? "border-accent/60 bg-accent/[0.06]" : "border-line bg-white"
+                className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-xs transition-all ${
+                  targeted
+                    ? "border-accent/60 bg-accent/[0.06] shadow-[0_1px_2px_rgba(28,27,25,0.05)]"
+                    : "border-line bg-white hover:shadow-card"
                 }`}
               >
                 <button
@@ -196,8 +198,10 @@ function TabButton({
       // espera quien navega con teclado, y las flechas cambian de pestaña.
       tabIndex={active ? 0 : -1}
       onClick={onClick}
-      className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-        active ? "bg-ink text-white" : "text-muted hover:bg-surface"
+      className={`rounded-lg px-3 py-1 text-xs font-medium transition-all ${
+        active
+          ? "bg-gradient-to-b from-ink to-ink-soft text-white shadow-[0_6px_14px_-8px_rgba(28,27,25,0.9)]"
+          : "text-muted hover:bg-surface hover:text-ink"
       }`}
     >
       {children}
@@ -372,10 +376,10 @@ function MeasureTab() {
               key={p.value}
               disabled={locked}
               onClick={() => patch({ priority: p.value })}
-              className={`rounded-full border px-2 py-1 text-[11px] disabled:opacity-50 ${
+              className={`rounded-full border px-2 py-1 text-[11px] font-medium transition-all disabled:opacity-50 ${
                 (current?.priority ?? 0) === p.value
-                  ? "border-transparent text-white"
-                  : "border-line hover:bg-surface"
+                  ? "border-transparent text-white shadow-[0_4px_10px_-6px_rgba(28,27,25,0.9)]"
+                  : "border-line bg-white hover:bg-surface"
               }`}
               style={
                 (current?.priority ?? 0) === p.value ? { background: p.color } : undefined
@@ -507,10 +511,10 @@ function CommentsTab() {
           <button
             key={pin.id}
             onClick={() => selectPin(pin.id)}
-            className={`block w-full rounded-lg border p-2 text-left transition ${
+            className={`block w-full rounded-xl border p-2 text-left transition-all ${
               pin.id === selectedPinId
-                ? "border-accent/60 bg-accent/[0.06]"
-                : "border-line bg-white hover:bg-surface"
+                ? "border-accent/60 bg-accent/[0.06] shadow-[0_1px_2px_rgba(28,27,25,0.05)]"
+                : "border-line bg-white hover:-translate-y-px hover:shadow-card"
             }`}
           >
             <div className="mb-0.5 flex items-center gap-1.5 text-[11px] text-muted">
@@ -544,9 +548,9 @@ function PinThread({ pin, layer }: { pin: Pin; layer: Layer }) {
   const [reply, setReply] = useState("");
 
   return (
-    <div className="rounded-xl border border-line bg-white p-3">
+    <div className="rounded-2xl border border-line bg-white p-3 shadow-card">
       <div className="mb-2 flex items-center gap-2 text-[11px] text-muted">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: layer.color }} />
+        <span className="h-2.5 w-2.5 rounded-full ring-1 ring-inset ring-black/10" style={{ background: layer.color }} />
         <span>{layer.name}</span>
         <span>·</span>
         <span>compás {pin.measureIndex == null ? "—" : pin.measureIndex + 1}</span>
@@ -729,10 +733,10 @@ function NoteList({
           <button
             key={`${layer.id}-${note.id}`}
             onClick={() => onSelect({ note, layer })}
-            className={`flex w-full items-start gap-2 rounded-lg border p-2 text-left ${
+            className={`flex w-full items-start gap-2 rounded-xl border p-2 text-left transition-all ${
               isSelected
-                ? "border-accent/60 bg-accent/[0.06]"
-                : "border-line bg-white hover:bg-surface"
+                ? "border-accent/60 bg-accent/[0.06] shadow-[0_1px_2px_rgba(28,27,25,0.05)]"
+                : "border-line bg-white hover:-translate-y-px hover:shadow-card"
             }`}
           >
             <span
@@ -786,10 +790,10 @@ function ChipRow({
             key={option}
             disabled={disabled}
             onClick={() => onChange(active ? "" : option)}
-            className={`rounded-full border px-2 py-0.5 text-[11px] disabled:opacity-50 ${
+            className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-50 ${
               active
-                ? "border-transparent bg-ink text-white"
-                : "border-line hover:bg-surface"
+                ? "border-transparent bg-ink text-white shadow-[0_4px_10px_-6px_rgba(28,27,25,0.9)]"
+                : "border-line bg-white hover:bg-surface"
             }`}
           >
             {option}

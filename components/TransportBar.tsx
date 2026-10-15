@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getSharedPlayer } from "@/lib/playback";
 import { useStore } from "@/lib/store";
+import { PauseIcon, PlayIcon, StopIcon } from "./icons";
 
 function formatTime(seconds: number) {
   const safe = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
@@ -90,35 +91,24 @@ export default function TransportBar() {
   };
 
   return (
-    <div className="no-print flex items-center gap-3 border-t border-line bg-white px-3 py-2 text-xs">
-      <div className="flex items-center gap-1">
+    <div className="no-print flex items-center gap-3 border-t border-line bg-white px-3 py-2 text-xs shadow-[0_-1px_2px_rgba(28,27,25,0.03)]">
+      <div className="flex items-center gap-1.5">
         <button
           onClick={isPlaying ? pause : play}
           disabled={!hasNotes}
           title={isPlaying ? "Pausa (espacio)" : "Reproducir el contenido del XML"}
-          className="grid h-8 w-8 place-items-center rounded-full bg-ink text-white disabled:opacity-40"
+          className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-b from-ink to-ink-soft text-white shadow-[0_8px_18px_-10px_rgba(28,27,25,0.95)] transition-all hover:shadow-[0_10px_20px_-10px_rgba(28,27,25,0.95)] active:translate-y-px disabled:opacity-40 disabled:shadow-none"
         >
-          {isPlaying ? (
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
-              <rect x="1.5" y="1" width="3" height="10" fill="currentColor" />
-              <rect x="7.5" y="1" width="3" height="10" fill="currentColor" />
-            </svg>
-          ) : (
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
-              <path d="M2 1l9 5-9 5V1Z" fill="currentColor" />
-            </svg>
-          )}
+          {isPlaying ? <PauseIcon size={13} /> : <PlayIcon size={13} />}
           <span className="sr-only">{isPlaying ? "Pausa" : "Reproducir"}</span>
         </button>
         <button
           onClick={stop}
           disabled={!hasNotes}
           title="Detener y volver al principio"
-          className="grid h-8 w-8 place-items-center rounded-full border border-line hover:bg-surface disabled:opacity-40"
+          className="grid h-9 w-9 place-items-center rounded-full border border-line bg-white text-ink transition-colors hover:bg-surface disabled:opacity-40"
         >
-          <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden>
-            <rect x="1.5" y="1.5" width="9" height="9" fill="currentColor" />
-          </svg>
+          <StopIcon size={12} />
           <span className="sr-only">Detener</span>
         </button>
       </div>
@@ -142,7 +132,7 @@ export default function TransportBar() {
       </span>
 
       {playheadMeasure != null && (
-        <span className="hidden rounded-md bg-surface px-2 py-1 tabular-nums text-muted md:block">
+        <span className="hidden rounded-lg border border-line bg-surface px-2 py-1 font-medium tabular-nums text-accent-deep md:block">
           compás {playheadMeasure + 1}
         </span>
       )}

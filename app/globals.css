@@ -20,6 +20,14 @@
   /* Segunda tinta del panel de marca: apenas se ve, pero evita que el fondo
      oscuro sea un rectángulo plano. */
   --color-ink-soft: #262320;
+
+  /* Elevación en tres pasos. El proyecto venía usando una sombra a mano en
+     cada tarjeta; tenerla en el tema evita que doce sitios se desvíen entre
+     sí. `card` para superficies en reposo, `lift` para las que se levantan al
+     pasar por encima y `pop` para lo que flota de verdad (diálogos, menús). */
+  --shadow-card: 0 1px 2px rgba(28, 27, 25, 0.05), 0 10px 24px -18px rgba(28, 27, 25, 0.28);
+  --shadow-lift: 0 2px 4px rgba(28, 27, 25, 0.05), 0 22px 42px -22px rgba(28, 27, 25, 0.34);
+  --shadow-pop: 0 4px 10px rgba(28, 27, 25, 0.08), 0 32px 64px -28px rgba(28, 27, 25, 0.4);
 }
 
 :root {
@@ -98,6 +106,35 @@ body {
     min-height: 26px;
     min-width: 26px;
   }
+}
+
+/* Entrada suave de bloques: sube unos píxeles y aparece. El bloque de
+   `prefers-reduced-motion` de más abajo deja la duración en 0,01 ms, así que
+   quien lo tenga pedido ve el contenido ya colocado, sin el movimiento. */
+@keyframes ps-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise-in {
+  animation: ps-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Escalona la entrada de una lista sin obligar a repetir el `animation-delay`
+   en cada elemento desde el JSX. */
+.rise-in-1 {
+  animation-delay: 0.06s;
+}
+.rise-in-2 {
+  animation-delay: 0.12s;
+}
+.rise-in-3 {
+  animation-delay: 0.18s;
 }
 
 .cursor-pencil {

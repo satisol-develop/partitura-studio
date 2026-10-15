@@ -18,10 +18,10 @@ function ExportItem({
     <button
       ref={ref}
       onClick={onClick}
-      className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-surface"
+      className="block w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface focus-visible:bg-surface"
     >
-      <span className="block text-xs font-medium">{title}</span>
-      <span className="block text-[11px] leading-relaxed text-muted">{detail}</span>
+      <span className="block text-xs font-semibold">{title}</span>
+      <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">{detail}</span>
     </button>
   );
 }
@@ -29,6 +29,15 @@ import AnnotationsPanel from "./AnnotationsPanel";
 import LayerPanel from "./LayerPanel";
 import ScoreCanvas from "./ScoreCanvas";
 import Toolbar from "./Toolbar";
+import {
+  ArrowLeftIcon,
+  ChevronDownIcon,
+  DownloadIcon,
+  FolderIcon,
+  LayersIcon,
+  MeasureNoteIcon,
+  SyncIcon,
+} from "./icons";
 import { downloadJson, downloadMusicXml } from "@/lib/files";
 import { useStore } from "@/lib/store";
 
@@ -144,16 +153,17 @@ export default function ScoreView() {
       {/* La cabecera se reparte en dos líneas en un móvil: los botones arriba y
           el título debajo, a ancho completo. Apretujado en una sola línea el
           título quedaba en «T…» y el compositor en «A…». */}
-      <header className="no-print safe-top safe-x flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-white px-3 py-2">
+      <header className="no-print safe-top safe-x flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-white px-3 py-2 shadow-[0_1px_2px_rgba(28,27,25,0.04)]">
         <button
           onClick={() => {
             void saveNow();
             closeScore();
           }}
-          className="shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-surface"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-surface"
           title="Volver a la biblioteca"
         >
-          ← Biblioteca
+          <ArrowLeftIcon size={14} />
+          Biblioteca
         </button>
 
         <div className="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-0">
@@ -188,11 +198,14 @@ export default function ScoreView() {
           onClick={() => setShowLayers((v) => !v)}
           aria-expanded={showLayers}
           aria-controls="panel-capas"
-          className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-xs ${
-            showLayers ? "border-line bg-surface" : "border-line hover:bg-surface"
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            showLayers
+              ? "border-accent/50 bg-accent/[0.08] text-accent-deep"
+              : "border-line bg-white hover:bg-surface"
           }`}
           title="Capas de anotación"
         >
+          <LayersIcon size={14} />
           Capas
         </button>
         <button
@@ -200,17 +213,22 @@ export default function ScoreView() {
           onClick={() => setShowInspector((v) => !v)}
           aria-expanded={showInspector}
           aria-controls="panel-anotaciones"
-          className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-xs ${
-            showInspector ? "border-line bg-surface" : "border-line hover:bg-surface"
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            showInspector
+              ? "border-accent/50 bg-accent/[0.08] text-accent-deep"
+              : "border-line bg-white hover:bg-surface"
           }`}
           title="Anotaciones, plantilla y comentarios"
         >
+          <MeasureNoteIcon size={14} />
           Anotaciones
         </button>
         <button
           onClick={() => setDrivePanelOpen(true)}
-          className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-xs ${
-            syncStatus === "error" ? "border-red-300 bg-red-50 text-red-700" : "border-line hover:bg-surface"
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            syncStatus === "error"
+              ? "border-red-300 bg-red-50 text-red-700"
+              : "border-line bg-white hover:bg-surface"
           }`}
           title={
             syncMessage
@@ -220,15 +238,16 @@ export default function ScoreView() {
                 : "Sincronizar con Drive"
           }
         >
+          <FolderIcon size={14} />
           {syncStatus === "working" ? "Drive…" : syncStatus === "error" ? "Drive !" : "Drive"}
         </button>
         <button
           onClick={() => void syncNow()}
-          className="shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-surface"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:text-ink"
           title="Sincronizar ahora (sube lo cambiado y baja lo que haya en Drive)"
           hidden={!syncMessage}
         >
-          ⟳
+          <SyncIcon size={14} className={syncStatus === "working" ? "animate-spin" : undefined} />
           <span className="sr-only">Sincronizar ahora</span>
         </button>
         <div className="relative shrink-0" ref={exportBox}>
@@ -246,19 +265,23 @@ export default function ScoreView() {
             }}
             aria-expanded={exportOpen}
             aria-haspopup="true"
-            className={`rounded-lg border px-2.5 py-1.5 text-xs ${
-              exportOpen ? "border-line bg-surface" : "border-line hover:bg-surface"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              exportOpen
+                ? "border-accent/50 bg-accent/[0.08] text-accent-deep"
+                : "border-line bg-white hover:bg-surface"
             }`}
             title="Descargar esta partitura"
           >
-            Exportar <span aria-hidden>▾</span>
+            <DownloadIcon size={14} />
+            Exportar
+            <ChevronDownIcon size={13} className={exportOpen ? "rotate-180" : ""} />
           </button>
 
           {exportOpen && (
             // Es un desplegable, no un `menu` de ARIA: no hay navegación con
             // flechas dentro, así que prometer ese rol sería mentir. Con `Tab`
             // se recorre, que es como funciona de verdad.
-            <div className="absolute right-0 top-full z-40 mt-1 w-72 rounded-xl border border-line bg-white p-1 shadow-xl">
+            <div className="rise-in absolute right-0 top-full z-40 mt-1.5 w-72 rounded-xl border border-line bg-white p-1 shadow-pop">
               <ExportItem
                 ref={exportFirst}
                 title="Copia de la partitura (.json)"
@@ -284,9 +307,14 @@ export default function ScoreView() {
       {saveError && (
         <div
           role="alert"
-          className="no-print flex items-start gap-2 border-b border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+          className="no-print flex items-start gap-2 border-b border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
         >
-          <span aria-hidden className="mt-0.5">⚠</span>
+          <span
+            aria-hidden
+            className="mt-px grid h-4 w-4 shrink-0 place-items-center rounded-full bg-red-700 text-[10px] font-bold text-white"
+          >
+            !
+          </span>
           <p className="min-w-0 flex-1 leading-relaxed">{saveError}</p>
         </div>
       )}
@@ -304,7 +332,7 @@ export default function ScoreView() {
             <aside
               id="panel-capas"
               aria-label="Capas de anotación"
-              className="no-print absolute inset-y-0 left-0 z-30 flex w-72 shrink-0 flex-col overflow-hidden border-r border-line bg-white shadow-2xl lg:static lg:z-auto lg:shadow-none"
+              className="no-print absolute inset-y-0 left-0 z-30 flex w-72 shrink-0 flex-col overflow-hidden border-r border-line bg-white shadow-pop lg:static lg:z-auto lg:shadow-none"
             >
               <LayerPanel />
             </aside>
@@ -325,7 +353,7 @@ export default function ScoreView() {
             <aside
               id="panel-anotaciones"
               aria-label="Anotaciones, plantilla y comentarios"
-              className="no-print absolute inset-y-0 right-0 z-30 flex w-80 shrink-0 flex-col overflow-hidden border-l border-line bg-white shadow-2xl lg:static lg:z-auto lg:shadow-none"
+              className="no-print absolute inset-y-0 right-0 z-30 flex w-80 shrink-0 flex-col overflow-hidden border-l border-line bg-white shadow-pop lg:static lg:z-auto lg:shadow-none"
             >
               <AnnotationsPanel />
             </aside>

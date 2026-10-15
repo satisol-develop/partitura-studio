@@ -7,6 +7,8 @@ import {
   HighlighterIcon,
   MeasureNoteIcon,
   PencilIcon,
+  RedoIcon,
+  UndoIcon,
 } from "./icons";
 import { useStore } from "@/lib/store";
 import { colorName, LAYER_PALETTE, type ToolId } from "@/lib/types";
@@ -47,17 +49,17 @@ export default function Toolbar() {
   const setWidth = tool === "highlighter" ? setMarkerWidth : setPenWidth;
 
   return (
-    <div className="no-print flex flex-wrap items-center gap-2 border-b border-line bg-white/80 px-3 py-2 backdrop-blur">
-      <div className="flex items-center rounded-lg border border-line bg-white p-0.5">
+    <div className="no-print flex flex-wrap items-center gap-2 border-b border-line bg-white/85 px-3 py-2 shadow-[0_1px_2px_rgba(28,27,25,0.03)] backdrop-blur">
+      <div className="flex items-center rounded-xl border border-line bg-surface/70 p-0.5">
         {TOOLS.map((t) => (
           <button
             key={t.id}
             title={t.hint}
             onClick={() => setTool(t.id)}
-            className={`touch-target grid h-8 w-9 place-items-center rounded-md text-sm transition ${
+            className={`touch-target grid h-8 w-9 place-items-center rounded-lg text-sm transition-all ${
               tool === t.id
-                ? "bg-ink text-white"
-                : "hover:bg-surface text-ink/80"
+                ? "bg-gradient-to-b from-ink to-ink-soft text-white shadow-[0_6px_14px_-8px_rgba(28,27,25,0.9)]"
+                : "text-ink/70 hover:bg-white hover:text-ink"
             }`}
             aria-pressed={tool === t.id}
           >
@@ -71,7 +73,7 @@ export default function Toolbar() {
         // En un móvil esta caja no cabe en la línea de la barra: se le da la
         // línea entera y, si aun así sobra anchura, se puede deslizar en
         // horizontal en vez de quedarse cortada por el borde.
-        <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto rounded-lg border border-line bg-white px-2 py-1 sm:w-auto">
+        <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto rounded-xl border border-line bg-white px-2 py-1 shadow-[0_1px_2px_rgba(28,27,25,0.04)] sm:w-auto">
           <div className="flex shrink-0 items-center gap-1">
             <button
               title="Usar el color de la capa activa"
@@ -122,24 +124,24 @@ export default function Toolbar() {
         </div>
       )}
 
-      <div className="flex items-center rounded-lg border border-line bg-white p-0.5">
+      <div className="flex items-center rounded-xl border border-line bg-surface/70 p-0.5">
         <button
           onClick={undo}
           disabled={!canUndo}
           title="Deshacer (Ctrl+Z)"
           aria-label="Deshacer"
-          className="touch-target grid h-8 w-9 place-items-center rounded-md text-base hover:bg-surface disabled:opacity-30"
+          className="touch-target grid h-8 w-9 place-items-center rounded-lg text-ink/70 transition-colors hover:bg-white hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
         >
-          <span aria-hidden>↶</span>
+          <UndoIcon size={17} />
         </button>
         <button
           onClick={redo}
           disabled={!canRedo}
           title="Rehacer (Ctrl+Shift+Z)"
           aria-label="Rehacer"
-          className="touch-target grid h-8 w-9 place-items-center rounded-md text-base hover:bg-surface disabled:opacity-30"
+          className="touch-target grid h-8 w-9 place-items-center rounded-lg text-ink/70 transition-colors hover:bg-white hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
         >
-          <span aria-hidden>↷</span>
+          <RedoIcon size={17} />
         </button>
       </div>
 
