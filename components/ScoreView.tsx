@@ -34,6 +34,7 @@ import {
   ChevronDownIcon,
   DownloadIcon,
   FolderIcon,
+  KeyboardIcon,
   LayersIcon,
   MeasureNoteIcon,
   SyncIcon,
@@ -48,6 +49,31 @@ import { useStore } from "@/lib/store";
  */
 const fitsSidePanels = () =>
   typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
+
+/**
+ * Los atajos, en una lista.
+ *
+ * Existen desde el principio y están en la ayuda emergente de cada botón, pero
+ * eso sólo sirve con ratón: los que no cuelgan de ningún botón —deshacer,
+ * guardar, reproducir, el zoom— no había forma de descubrirlos en la interfaz.
+ * Vive aquí, junto al componente que los registra, para que no se separen.
+ */
+const SHORTCUTS: { keys: string; label: string }[] = [
+  { keys: "P", label: "Lápiz" },
+  { keys: "H", label: "Resaltador" },
+  { keys: "E", label: "Goma" },
+  { keys: "C", label: "Comentario" },
+  { keys: "N", label: "Nota de compás" },
+  { keys: "V", label: "Seleccionar y mover" },
+  { keys: "Espacio", label: "Reproducir o pausar" },
+  { keys: "+", label: "Acercar" },
+  { keys: "−", label: "Alejar" },
+  { keys: "0", label: "Zoom al 100 %" },
+  { keys: "Esc", label: "Quitar la selección" },
+  { keys: "Ctrl+Z", label: "Deshacer" },
+  { keys: "Ctrl+Shift+Z", label: "Rehacer" },
+  { keys: "Ctrl+S", label: "Guardar ahora" },
+];
 
 export default function ScoreView() {
   const doc = useStore((s) => s.doc);
@@ -64,9 +90,23 @@ export default function ScoreView() {
   // cajón taparía la partitura en cuanto se abre un documento.
   const [showLayers, setShowLayers] = useState(fitsSidePanels);
   const [showInspector, setShowInspector] = useState(fitsSidePanels);
+  // Si los paneles van al lado o dentro de un cajón no es sólo una diferencia
+  // de CSS: de ella depende que el foco tenga que entrar y quedar atrapado.
+  // Al lado, el foco va donde el usuario quiera; en cajón, es un diálogo y el
+  // fondo no debe ser alcanzable. Se mantiene en estado para que el JSX pueda
+  // aplicarlo (los `lg:` de Tailwind y este `matchMedia` usan el mismo corte).
+  const [sideBySide, setSideBySide] = useState(fitsSidePanels);
   const setMeta = useStore((s) => s.setMeta);
   const layersButton = useRef<HTMLButtonElement | null>(null);
   const inspectorButton = useRef<HTMLButtonElement | null>(null);
+  const layersPanel = useRef<HTMLElement | null>(null);
+  const inspectorPanel = useRef<HTMLElement | null>(null);
+  // A quién devolver el foco al cerrar. Se guarda en un ref y no se enfoca al
+  // momento porque el disparador está inerte mientras el cajón está abierto:
+  // hay que esperar a que el fondo deje de estarlo (el efecto de abajo).
+  const returnFocusTo = useRef<HTMLElement | null>(null);
+
+  const drawerOpen = !sideBySide && (showLayers || showInspector);
   // Menú de exportación: son dos cosas distintas y cada una se lleva a un sitio
   // distinto (las capas a otra aplicación, el MusicXML a otro editor de
   // partituras), así que no caben en un solo botón que adivine cuál quieres.
@@ -74,6 +114,10 @@ export default function ScoreView() {
   const exportBox = useRef<HTMLDivElement | null>(null);
   const exportToggle = useRef<HTMLButtonElement | null>(null);
   const exportFirst = useRef<HTMLButtonElement | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutsBox = useRef<HTMLDivElement | null>(null);
+  const shortcutsToggle = useRef<HTMLButtonElement | null>(null);
+  const shortcutsPanel = useRef<HTMLDivElement | null>(null);
 
   // Al girar la tableta o cambiar el tamaño de la ventana, los paneles se
   // ponen como toca en la maquetación nueva: abiertos al lado cuando caben y
@@ -90,6 +134,7 @@ export default function ScoreView() {
       last = mq.matches;
       setShowLayers(mq.matches);
       setShowInspector(mq.matches);
+      setSideBySide(mq.matches);
     };
     // Los dos avisos, porque no todos los entornos que redimensionan la vista
     // emiten el cambio de la media query. `sync` es idempotente.
@@ -108,16 +153,66 @@ export default function ScoreView() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || fitsSidePanels()) return;
       if (showInspector) {
+        returnFocusTo.current = inspectorButton.current;
         setShowInspector(false);
-        inspectorButton.current?.focus();
       } else if (showLayers) {
+        returnFocusTo.current = layersButton.current;
         setShowLayers(false);
-        layersButton.current?.focus();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showLayers, showInspector]);
+
+  // En cajón, al abrir el foco entra en el panel: si se quedara en el disparador
+  // (ahora inerte), quien navega con teclado no tendría dónde ir.
+  useEffect(() => {
+    if (sideBySide) return;
+    const panel = showInspector ? inspectorPanel.current : showLayers ? layersPanel.current : null;
+    if (!panel) return;
+    const first = panel.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    (first ?? panel).focus();
+  }, [showLayers, showInspector, sideBySide]);
+
+  // Y al cerrarlo el foco vuelve a su botón, ya sin el `inert` puesto.
+  useEffect(() => {
+    if (sideBySide || showLayers || showInspector) return;
+    const target = returnFocusTo.current;
+    if (!target) return;
+    returnFocusTo.current = null;
+    target.focus();
+  }, [showLayers, showInspector, sideBySide]);
+
+  // El cajón es un diálogo: `Tab` no puede salirse a la interfaz de detrás.
+  useEffect(() => {
+    if (sideBySide) return;
+    const panel = showInspector ? inspectorPanel.current : showLayers ? layersPanel.current : null;
+    if (!panel) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const items = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null);
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const inside = active != null && panel.contains(active);
+      if (!event.shiftKey && (!inside || active === last)) {
+        event.preventDefault();
+        first.focus();
+      } else if (event.shiftKey && (!inside || active === first)) {
+        event.preventDefault();
+        last.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [showLayers, showInspector, sideBySide]);
 
   // El menú de exportación se cierra al pulsar fuera y con `Escape`, y en ese
   // caso el foco vuelve a su botón: un desplegable que se queda abierto tapando
@@ -141,6 +236,29 @@ export default function ScoreView() {
     };
   }, [exportOpen]);
 
+  // La ayuda de atajos se cierra igual que el menú de exportar, y el foco entra
+  // en el panel para poder leerlo con el teclado (no hay nada que tabular
+  // dentro, así que se enfoca el panel y no su primer elemento).
+  useEffect(() => {
+    if (!shortcutsOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setShortcutsOpen(false);
+      shortcutsToggle.current?.focus();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (shortcutsBox.current?.contains(event.target as Node)) return;
+      setShortcutsOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerdown", onPointerDown);
+    shortcutsPanel.current?.focus();
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [shortcutsOpen]);
+
   if (!doc) return null;
 
   const annotationCount = doc.layers.reduce(
@@ -153,7 +271,10 @@ export default function ScoreView() {
       {/* La cabecera se reparte en dos líneas en un móvil: los botones arriba y
           el título debajo, a ancho completo. Apretujado en una sola línea el
           título quedaba en «T…» y el compositor en «A…». */}
-      <header className="no-print safe-top safe-x flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-white px-3 py-2 shadow-[0_1px_2px_rgba(28,27,25,0.04)]">
+      <header
+        inert={drawerOpen}
+        className="no-print safe-top safe-x flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-white px-3 py-2 shadow-[0_1px_2px_rgba(28,27,25,0.04)]"
+      >
         <button
           onClick={() => {
             void saveNow();
@@ -256,6 +377,56 @@ export default function ScoreView() {
           <SyncIcon size={14} className={syncStatus === "working" ? "animate-spin" : undefined} />
           <span className="sr-only">Sincronizar ahora</span>
         </button>
+        <div className="relative shrink-0" ref={shortcutsBox}>
+          <button
+            ref={shortcutsToggle}
+            onClick={() => setShortcutsOpen((v) => !v)}
+            aria-expanded={shortcutsOpen}
+            aria-haspopup="true"
+            className={`touch-target flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              shortcutsOpen
+                ? "border-accent/50 bg-accent/[0.08] text-accent-deep"
+                : "border-line bg-white hover:bg-surface"
+            }`}
+            title="Atajos de teclado"
+          >
+            <KeyboardIcon size={15} />
+            <span className="hidden sm:inline">Atajos</span>
+            <span className="sr-only sm:hidden">Atajos de teclado</span>
+          </button>
+
+          {shortcutsOpen && (
+            <div
+              ref={shortcutsPanel}
+              tabIndex={-1}
+              role="region"
+              aria-label="Atajos de teclado"
+              // En un móvil el botón no está pegado al borde derecho (la fila
+              // lleva más botones), así que anclar el panel a su derecha lo
+              // sacaba de la pantalla por la izquierda. Ahí va fijo abajo, como
+              // una hoja; desde tableta vuelve a colgar del botón.
+              className="rise-in fixed inset-x-3 bottom-3 z-50 max-h-[70dvh] overflow-y-auto rounded-2xl border border-line bg-white p-2 shadow-pop sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:bottom-auto sm:mt-1.5 sm:max-h-none sm:w-72 sm:overflow-visible"
+            >
+              <ul className="thin-scroll max-h-[55vh] space-y-0.5 overflow-y-auto">
+                {SHORTCUTS.map((shortcut) => (
+                  <li
+                    key={shortcut.keys}
+                    className="flex items-center justify-between gap-3 rounded-lg px-1.5 py-1"
+                  >
+                    <span className="text-xs text-muted">{shortcut.label}</span>
+                    <kbd className="shrink-0 rounded-md border border-line bg-surface px-1.5 py-0.5 font-sans text-[11px] font-medium text-ink">
+                      {shortcut.keys}
+                    </kbd>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1.5 border-t border-line px-1.5 pt-1.5 text-[11px] leading-relaxed text-muted">
+                No actúan mientras escribes en un campo de texto.
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="relative shrink-0" ref={exportBox}>
           <button
             ref={exportToggle}
@@ -311,6 +482,10 @@ export default function ScoreView() {
         </div>
       </header>
 
+      {/* La barra y el aviso quedan inertes con el cajón abierto: es lo que hace
+          que el cajón sea un diálogo de verdad y no un panel flotante encima de
+          una interfaz que sigue respondiendo por detrás. */}
+      <div inert={drawerOpen} className="shrink-0">
       {saveError && (
         <div
           role="alert"
@@ -327,26 +502,43 @@ export default function ScoreView() {
       )}
 
       <Toolbar />
+      </div>
 
       <div className="relative flex min-h-0 flex-1">
         {showLayers && (
           <>
             <div
               className="absolute inset-0 z-20 bg-ink/25 lg:hidden"
-              onClick={() => setShowLayers(false)}
+              onClick={() => {
+                returnFocusTo.current = layersButton.current;
+                setShowLayers(false);
+              }}
               aria-hidden
             />
             <aside
+              ref={layersPanel}
               id="panel-capas"
               aria-label="Capas de anotación"
+              role={sideBySide ? undefined : "dialog"}
+              aria-modal={sideBySide ? undefined : true}
+              tabIndex={-1}
               className="no-print absolute inset-y-0 left-0 z-30 flex w-72 shrink-0 flex-col overflow-hidden border-r border-line bg-white shadow-pop lg:static lg:z-auto lg:shadow-none"
             >
-              <LayerPanel />
+              <LayerPanel
+                onClose={
+                  sideBySide
+                    ? undefined
+                    : () => {
+                        returnFocusTo.current = layersButton.current;
+                        setShowLayers(false);
+                      }
+                }
+              />
             </aside>
           </>
         )}
 
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main inert={drawerOpen} className="flex min-w-0 flex-1 flex-col">
           <ScoreCanvas />
         </main>
 
@@ -354,15 +546,31 @@ export default function ScoreView() {
           <>
             <div
               className="absolute inset-0 z-20 bg-ink/25 lg:hidden"
-              onClick={() => setShowInspector(false)}
+              onClick={() => {
+                returnFocusTo.current = inspectorButton.current;
+                setShowInspector(false);
+              }}
               aria-hidden
             />
             <aside
+              ref={inspectorPanel}
               id="panel-anotaciones"
               aria-label="Anotaciones, plantilla y comentarios"
+              role={sideBySide ? undefined : "dialog"}
+              aria-modal={sideBySide ? undefined : true}
+              tabIndex={-1}
               className="no-print absolute inset-y-0 right-0 z-30 flex w-80 shrink-0 flex-col overflow-hidden border-l border-line bg-white shadow-pop lg:static lg:z-auto lg:shadow-none"
             >
-              <AnnotationsPanel />
+              <AnnotationsPanel
+                onClose={
+                  sideBySide
+                    ? undefined
+                    : () => {
+                        returnFocusTo.current = inspectorButton.current;
+                        setShowInspector(false);
+                      }
+                }
+              />
             </aside>
           </>
         )}

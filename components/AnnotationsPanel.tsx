@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { CloseIcon } from "./icons";
 import { collectNotes, collectPins, useStore } from "@/lib/store";
 import {
   EMPTY_FIELDS,
@@ -29,7 +30,7 @@ const PRIORITIES: { value: Priority; label: string; color: string }[] = [
   { value: 3, label: "Crítico", color: "#a40e26" },
 ];
 
-export default function AnnotationsPanel() {
+export default function AnnotationsPanel({ onClose }: { onClose?: () => void } = {}) {
   const [tab, setTab] = useState<"measure" | "comments">("measure");
 
   // Navegación entre pestañas con las flechas, como cualquier tablist: si no,
@@ -44,28 +45,42 @@ export default function AnnotationsPanel() {
   return (
     <div className="flex h-full flex-col">
       <PartsSection />
-      <div
-        role="tablist"
-        aria-label="Secciones del panel de anotaciones"
-        className="flex items-center gap-1 border-b border-line bg-surface/50 px-2 py-1.5"
-        onKeyDown={onTabKeyDown}
-      >
-        <TabButton
-          id="tab-compases"
-          panelId="panel-compases"
-          active={tab === "measure"}
-          onClick={() => setTab("measure")}
+      {/* La fila envuelve al `tablist` en vez de meter el botón dentro: un
+          tablist sólo puede contener pestañas. */}
+      <div className="flex items-center gap-1 border-b border-line bg-surface/50 px-2 py-1.5">
+        <div
+          role="tablist"
+          aria-label="Secciones del panel de anotaciones"
+          className="flex items-center gap-1"
+          onKeyDown={onTabKeyDown}
         >
-          Compases
-        </TabButton>
-        <TabButton
-          id="tab-comentarios"
-          panelId="panel-comentarios"
-          active={tab === "comments"}
-          onClick={() => setTab("comments")}
-        >
-          Comentarios
-        </TabButton>
+          <TabButton
+            id="tab-compases"
+            panelId="panel-compases"
+            active={tab === "measure"}
+            onClick={() => setTab("measure")}
+          >
+            Compases
+          </TabButton>
+          <TabButton
+            id="tab-comentarios"
+            panelId="panel-comentarios"
+            active={tab === "comments"}
+            onClick={() => setTab("comments")}
+          >
+            Comentarios
+          </TabButton>
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            title="Cerrar el panel"
+            aria-label="Cerrar el panel de anotaciones"
+            className="touch-target ml-auto grid h-7 w-7 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:text-ink"
+          >
+            <CloseIcon size={15} />
+          </button>
+        )}
       </div>
       <SelectedStrokeCard />
       <div

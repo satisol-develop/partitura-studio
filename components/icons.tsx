@@ -267,6 +267,25 @@ export function SyncIcon({ size = 15, className }: IconProps) {
   );
 }
 
+export function SearchIcon({ size = 15, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4 4" />
+    </svg>
+  );
+}
+
+/** Atajos de teclado: una tecla, que es de lo que va la ayuda. */
+export function KeyboardIcon({ size = 15, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+      <path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M8 14h8" />
+    </svg>
+  );
+}
+
 export function ArrowLeftIcon({ size = 15, className }: IconProps) {
   return (
     <svg {...base(size, className)}>

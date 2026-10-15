@@ -18,6 +18,7 @@ import {
   LogoutIcon,
   MusicIcon,
   PencilIcon,
+  SearchIcon,
   SparkIcon,
   TrashIcon,
   UploadIcon,
@@ -69,10 +70,24 @@ export default function LibraryView() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
 
   const annotationTotal = library.reduce((acc, score) => acc + score.annotationCount, 0);
   const driveCount = library.filter((score) => remoteIds.has(score.id)).length;
   const syncing = syncStatus === "working";
+
+  // Buscar por título, autor y origen: son los tres datos que se ven en la
+  // ficha, así que es lo que uno espera poder escribir. Con pocas partituras
+  // no hacía falta, pero la lista crece y hasta ahora no había forma de
+  // encontrar una sin recorrerla entera.
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? library.filter((score) =>
+        `${score.title} ${score.composer} ${SOURCE_LABELS[score.source] ?? score.source}`
+          .toLowerCase()
+          .includes(needle),
+      )
+    : library;
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -310,14 +325,31 @@ export default function LibraryView() {
         )}
 
         {/* ------------------------------------------------- lista */}
-        <div className="mt-7 flex items-baseline justify-between gap-3">
+        <div className="mt-7 flex flex-wrap items-center gap-x-3 gap-y-2">
           <h2 className="text-sm font-semibold tracking-tight">
             {library.length > 0 ? "Partituras recientes" : "Empezar"}
           </h2>
           {library.length > 0 && (
-            <span className="text-[11px] text-muted">
-              {library.length} {library.length === 1 ? "partitura" : "partituras"}
-            </span>
+            <>
+              <span className="text-[11px] text-muted">
+                {needle ? `${visible.length} de ${library.length}` : library.length}{" "}
+                {library.length === 1 ? "partitura" : "partituras"}
+              </span>
+              <label className="relative ml-auto flex w-full items-center sm:w-72">
+                <span className="sr-only">Buscar en la biblioteca</span>
+                <SearchIcon
+                  size={15}
+                  className="pointer-events-none absolute left-2.5 text-muted"
+                />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Buscar por título o autor…"
+                  className="w-full rounded-xl border border-line bg-white py-2 pr-3 pl-8 text-sm outline-none transition-colors focus:border-accent"
+                />
+              </label>
+            </>
           )}
         </div>
 
@@ -332,9 +364,23 @@ export default function LibraryView() {
               ejemplos de arriba para probar las capas.
             </p>
           </div>
+        ) : visible.length === 0 ? (
+          <div className="rise-in mt-3 rounded-3xl border border-dashed border-line bg-white/70 p-10 text-center shadow-card">
+            <p className="text-sm font-medium">Ninguna partitura coincide</p>
+            <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-muted">
+              No hay nada que contenga «{query.trim()}» en el título, el autor ni
+              el origen.
+            </p>
+            <button
+              onClick={() => setQuery("")}
+              className="mt-4 rounded-xl border border-line bg-white px-3 py-2 text-sm font-medium transition-colors hover:bg-surface"
+            >
+              Ver todas
+            </button>
+          </div>
         ) : (
           <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-            {library.map((score) => {
+            {visible.map((score) => {
               const accent = accentFor(score.id);
               const inDrive = remoteIds.has(score.id);
               return (

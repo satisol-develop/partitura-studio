@@ -1,7 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDownIcon, EyeIcon, EyeOffIcon, LockIcon, PlusIcon, UnlockIcon } from "./icons";
+import { useEffect, useRef, useState } from "react";
+import {
+  ChevronDownIcon,
+  CloseIcon,
+  EyeIcon,
+  EyeOffIcon,
+  LockIcon,
+  PlusIcon,
+  UnlockIcon,
+} from "./icons";
 import { useStore } from "@/lib/store";
 import { colorName, LAYER_PALETTE, type Layer } from "@/lib/types";
 
@@ -10,8 +18,11 @@ import { colorName, LAYER_PALETTE, type Layer } from "@/lib/types";
  * canciones de una playlist. Puedes ocultar la capa del director para
  * estudiar con la tuya, o superponer tu digitación sobre la corrección
  * del profesor sin que una tape a la otra.
+ *
+ * `onClose` sólo llega cuando el panel va dentro de un cajón en un móvil: ahí
+ * hace falta una salida visible, además de `Escape` y del toque en el fondo.
  */
-export default function LayerPanel() {
+export default function LayerPanel({ onClose }: { onClose?: () => void } = {}) {
   const layers = useStore((s) => s.doc?.layers ?? []);
   const activeLayerId = useStore((s) => s.activeLayerId);
   const soloActiveLayer = useStore((s) => s.soloActiveLayer);
@@ -56,6 +67,16 @@ export default function LayerPanel() {
             <PlusIcon size={13} />
             Añadir
           </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Cerrar el panel"
+              aria-label="Cerrar el panel de capas"
+              className="touch-target grid h-7 w-7 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:text-ink"
+            >
+              <CloseIcon size={15} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -119,10 +140,36 @@ function LayerRow({
   onDelete: () => void;
 }) {
   const [menu, setMenu] = useState(false);
+  const row = useRef<HTMLDivElement | null>(null);
   const total = layer.strokes.length + layer.pins.length + layer.notes.length;
+
+  // El menú de la capa es un desplegable dentro del cajón: se cierra al pulsar
+  // fuera y con `Escape`. Sin esto, `Escape` subía hasta la vista del editor y
+  // cerraba el cajón entero, que es lo contrario de lo que se espera: primero
+  // se cierra lo de dentro. El `stopPropagation` en captura es lo que evita ese
+  // viaje hacia arriba.
+  useEffect(() => {
+    if (!menu) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setMenu(false);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (row.current?.contains(event.target as Node)) return;
+      setMenu(false);
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [menu]);
 
   return (
     <div
+      ref={row}
       onClick={onSelect}
       className={`group cursor-pointer rounded-xl border p-2 transition-all duration-150 ${
         active
