@@ -156,7 +156,7 @@ export default function LoginView() {
   return (
     <div className="app-height safe-top safe-bottom thin-scroll overflow-y-auto bg-paper lg:grid lg:grid-cols-[1.05fr_1fr]">
       {/* ------------------------------------------------ panel de marca */}
-      <section className="relative isolate overflow-hidden bg-gradient-to-br from-ink via-ink to-ink-soft px-6 pt-9 pb-8 text-paper lg:flex lg:flex-col lg:justify-between lg:px-12 lg:py-14">
+      <section className="relative isolate overflow-hidden bg-gradient-to-br from-ink via-ink to-ink-soft px-6 pt-7 pb-7 text-paper lg:flex lg:flex-col lg:justify-between lg:px-12 lg:py-14">
         {/* Un resplandor en dos tintas de la paleta: da profundidad sin
             competir con el formulario, que es lo que hay que leer. */}
         <div
@@ -182,15 +182,15 @@ export default function LoginView() {
         <div className="relative">
           <Logo variant="paper" size={42} />
 
-          <span className="mt-8 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-light">
+          <span className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-light lg:mt-8">
             <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent-light" />
             Anotación musical por capas
           </span>
 
-          <h1 className="mt-4 max-w-md bg-gradient-to-br from-paper via-paper to-paper/60 bg-clip-text text-3xl font-semibold tracking-tight text-balance text-transparent lg:text-[2.7rem] lg:leading-[1.08]">
+          <h1 className="mt-3 max-w-md bg-gradient-to-br from-paper via-paper to-paper/60 bg-clip-text text-[1.7rem] font-semibold leading-[1.15] tracking-tight text-balance text-transparent sm:text-3xl lg:mt-4 lg:text-[2.7rem] lg:leading-[1.08]">
             Anota la música, no la página
           </h1>
-          <p className="mt-3 max-w-md text-sm leading-relaxed text-paper/70">
+          <p className="mt-2.5 max-w-md text-[13px] leading-relaxed text-paper/70 sm:text-sm lg:mt-3">
             Todo lo que marcas —trazos, cifras y comentarios— queda en capas
             separadas, encima del MusicXML original. El archivo sigue intacto.
           </p>
@@ -223,7 +223,7 @@ export default function LoginView() {
           </ul>
         </div>
 
-        <div className="relative mt-9 lg:mt-0">
+        <div className="relative mt-6 lg:mt-0">
           <PaletteStrip />
           <p className="mt-2 max-w-sm text-[11px] leading-relaxed text-paper/55">
             Ocho tintas, una por capa. Se ocultan, se reordenan y se recolorean
@@ -233,7 +233,7 @@ export default function LoginView() {
       </section>
 
       {/* --------------------------------------------------- formulario */}
-      <section className="relative flex flex-1 items-start justify-center overflow-hidden px-6 py-10 lg:items-center lg:px-12">
+      <section className="relative flex flex-1 items-start justify-center overflow-hidden px-5 py-8 lg:items-center lg:px-12 lg:py-10">
         {/* El lado claro también respira: un halo tenue de acento detrás de la
             tarjeta, que es la única cosa con relieve de este panel. */}
         <div
@@ -354,7 +354,7 @@ export default function LoginView() {
             <button
               type="submit"
               disabled={busy}
-              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-accent to-accent-deep px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_-12px_rgba(24,88,196,0.85)] transition-all hover:from-accent-deep hover:to-accent-deep-hover hover:shadow-[0_14px_26px_-12px_rgba(24,88,196,0.9)] active:translate-y-px disabled:opacity-60 disabled:shadow-none"
+              className="mt-1 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-accent to-accent-deep px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_22px_-12px_rgba(24,88,196,0.85)] transition-all hover:from-accent-deep hover:to-accent-deep-hover hover:shadow-[0_14px_26px_-12px_rgba(24,88,196,0.9)] active:translate-y-px disabled:opacity-60 disabled:shadow-none"
             >
               {busy ? "Comprobando…" : "Entrar"}
             </button>

@@ -159,11 +159,12 @@ export default function ScoreView() {
             void saveNow();
             closeScore();
           }}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-surface"
+          className="touch-target flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-surface"
           title="Volver a la biblioteca"
         >
-          <ArrowLeftIcon size={14} />
-          Biblioteca
+          <ArrowLeftIcon size={15} />
+          <span className="hidden sm:inline">Biblioteca</span>
+          <span className="sr-only sm:hidden">Volver a la biblioteca</span>
         </button>
 
         <div className="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-0">
@@ -198,34 +199,36 @@ export default function ScoreView() {
           onClick={() => setShowLayers((v) => !v)}
           aria-expanded={showLayers}
           aria-controls="panel-capas"
-          className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+          className={`touch-target flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
             showLayers
               ? "border-accent/50 bg-accent/[0.08] text-accent-deep"
               : "border-line bg-white hover:bg-surface"
           }`}
           title="Capas de anotación"
         >
-          <LayersIcon size={14} />
-          Capas
+          <LayersIcon size={15} />
+          <span className="hidden sm:inline">Capas</span>
+          <span className="sr-only sm:hidden">Capas de anotación</span>
         </button>
         <button
           ref={inspectorButton}
           onClick={() => setShowInspector((v) => !v)}
           aria-expanded={showInspector}
           aria-controls="panel-anotaciones"
-          className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+          className={`touch-target flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
             showInspector
               ? "border-accent/50 bg-accent/[0.08] text-accent-deep"
               : "border-line bg-white hover:bg-surface"
           }`}
           title="Anotaciones, plantilla y comentarios"
         >
-          <MeasureNoteIcon size={14} />
-          Anotaciones
+          <MeasureNoteIcon size={15} />
+          <span className="hidden sm:inline">Anotaciones</span>
+          <span className="sr-only sm:hidden">Anotaciones, plantilla y comentarios</span>
         </button>
         <button
           onClick={() => setDrivePanelOpen(true)}
-          className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+          className={`touch-target flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
             syncStatus === "error"
               ? "border-red-300 bg-red-50 text-red-700"
               : "border-line bg-white hover:bg-surface"
@@ -238,12 +241,15 @@ export default function ScoreView() {
                 : "Sincronizar con Drive"
           }
         >
-          <FolderIcon size={14} />
-          {syncStatus === "working" ? "Drive…" : syncStatus === "error" ? "Drive !" : "Drive"}
+          <FolderIcon size={15} />
+          <span className="hidden sm:inline">
+            {syncStatus === "working" ? "Drive…" : syncStatus === "error" ? "Drive !" : "Drive"}
+          </span>
+          <span className="sr-only sm:hidden">Drive</span>
         </button>
         <button
           onClick={() => void syncNow()}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:text-ink"
+          className="touch-target grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:text-ink"
           title="Sincronizar ahora (sube lo cambiado y baja lo que haya en Drive)"
           hidden={!syncMessage}
         >
@@ -265,15 +271,16 @@ export default function ScoreView() {
             }}
             aria-expanded={exportOpen}
             aria-haspopup="true"
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            className={`touch-target flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
               exportOpen
                 ? "border-accent/50 bg-accent/[0.08] text-accent-deep"
                 : "border-line bg-white hover:bg-surface"
             }`}
             title="Descargar esta partitura"
           >
-            <DownloadIcon size={14} />
-            Exportar
+            <DownloadIcon size={15} />
+            <span className="hidden sm:inline">Exportar</span>
+            <span className="sr-only sm:hidden">Exportar</span>
             <ChevronDownIcon size={13} className={exportOpen ? "rotate-180" : ""} />
           </button>
 

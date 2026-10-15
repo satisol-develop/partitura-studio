@@ -91,13 +91,13 @@ export default function TransportBar() {
   };
 
   return (
-    <div className="no-print flex items-center gap-3 border-t border-line bg-white px-3 py-2 text-xs shadow-[0_-1px_2px_rgba(28,27,25,0.03)]">
-      <div className="flex items-center gap-1.5">
+    <div className="no-print flex items-center gap-2 border-t border-line bg-white px-3 py-2 text-xs shadow-[0_-1px_2px_rgba(28,27,25,0.03)] sm:gap-3">
+      <div className="flex shrink-0 items-center gap-1.5">
         <button
           onClick={isPlaying ? pause : play}
           disabled={!hasNotes}
           title={isPlaying ? "Pausa (espacio)" : "Reproducir el contenido del XML"}
-          className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-b from-ink to-ink-soft text-white shadow-[0_8px_18px_-10px_rgba(28,27,25,0.95)] transition-all hover:shadow-[0_10px_20px_-10px_rgba(28,27,25,0.95)] active:translate-y-px disabled:opacity-40 disabled:shadow-none"
+          className="touch-target grid h-9 w-9 place-items-center rounded-full bg-gradient-to-b from-ink to-ink-soft text-white shadow-[0_8px_18px_-10px_rgba(28,27,25,0.95)] transition-all hover:shadow-[0_10px_20px_-10px_rgba(28,27,25,0.95)] active:translate-y-px disabled:opacity-40 disabled:shadow-none"
         >
           {isPlaying ? <PauseIcon size={13} /> : <PlayIcon size={13} />}
           <span className="sr-only">{isPlaying ? "Pausa" : "Reproducir"}</span>
@@ -106,7 +106,7 @@ export default function TransportBar() {
           onClick={stop}
           disabled={!hasNotes}
           title="Detener y volver al principio"
-          className="grid h-9 w-9 place-items-center rounded-full border border-line bg-white text-ink transition-colors hover:bg-surface disabled:opacity-40"
+          className="touch-target grid h-9 w-9 place-items-center rounded-full border border-line bg-white text-ink transition-colors hover:bg-surface disabled:opacity-40"
         >
           <StopIcon size={12} />
           <span className="sr-only">Detener</span>
@@ -138,7 +138,7 @@ export default function TransportBar() {
       )}
 
       <label
-        className="flex cursor-pointer items-center gap-1.5 text-muted"
+        className="flex shrink-0 cursor-pointer items-center gap-1.5 text-muted"
         title="Desplazar la partitura para seguir lo que suena"
       >
         <input
@@ -147,10 +147,12 @@ export default function TransportBar() {
           onChange={(e) => setFollowPlayhead(e.target.checked)}
           className="h-3.5 w-3.5"
         />
-        Seguir
+        <span className="sr-only sm:not-sr-only">Seguir</span>
       </label>
 
-      <div className="w-16 text-right">
+      {/* La barra fina repite lo que ya dice el deslizador de posición: en un
+          móvil estrecho se ahorra su ancho para que «Seguir» no quede cortado. */}
+      <div className="hidden w-16 text-right sm:block">
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-line">
           <div
             className="h-full rounded-full bg-accent transition-[width] duration-75"

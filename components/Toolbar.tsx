@@ -69,6 +69,30 @@ export default function Toolbar() {
         ))}
       </div>
 
+      {/* Deshacer y rehacer van pegados a las herramientas: en un móvil, si se
+          separan, cada grupo cae en su propia línea y la barra se come media
+          pantalla. */}
+      <div className="flex items-center rounded-xl border border-line bg-surface/70 p-0.5">
+        <button
+          onClick={undo}
+          disabled={!canUndo}
+          title="Deshacer (Ctrl+Z)"
+          aria-label="Deshacer"
+          className="touch-target grid h-8 w-9 place-items-center rounded-lg text-ink/70 transition-colors hover:bg-white hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          <UndoIcon size={17} />
+        </button>
+        <button
+          onClick={redo}
+          disabled={!canRedo}
+          title="Rehacer (Ctrl+Shift+Z)"
+          aria-label="Rehacer"
+          className="touch-target grid h-8 w-9 place-items-center rounded-lg text-ink/70 transition-colors hover:bg-white hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          <RedoIcon size={17} />
+        </button>
+      </div>
+
       {inkTool && (
         // En un móvil esta caja no cabe en la línea de la barra: se le da la
         // línea entera y, si aun así sobra anchura, se puede deslizar en
@@ -123,27 +147,6 @@ export default function Toolbar() {
           </label>
         </div>
       )}
-
-      <div className="flex items-center rounded-xl border border-line bg-surface/70 p-0.5">
-        <button
-          onClick={undo}
-          disabled={!canUndo}
-          title="Deshacer (Ctrl+Z)"
-          aria-label="Deshacer"
-          className="touch-target grid h-8 w-9 place-items-center rounded-lg text-ink/70 transition-colors hover:bg-white hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
-        >
-          <UndoIcon size={17} />
-        </button>
-        <button
-          onClick={redo}
-          disabled={!canRedo}
-          title="Rehacer (Ctrl+Shift+Z)"
-          aria-label="Rehacer"
-          className="touch-target grid h-8 w-9 place-items-center rounded-lg text-ink/70 transition-colors hover:bg-white hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
-        >
-          <RedoIcon size={17} />
-        </button>
-      </div>
 
       {inkTool && (
         <span

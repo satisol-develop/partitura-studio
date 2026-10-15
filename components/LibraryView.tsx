@@ -149,7 +149,7 @@ export default function LibraryView() {
             <button
               onClick={() => setDrivePanelOpen(true)}
               title="Ajustes de sincronización con Drive"
-              className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium shadow-sm transition-colors ${
+              className={`touch-target flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium shadow-sm transition-colors ${
                 syncStatus === "error"
                   ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
                   : "border-line bg-white text-ink hover:bg-surface"
@@ -164,7 +164,7 @@ export default function LibraryView() {
                 onClick={doSignOut}
                 title="Cerrar la sesión"
                 aria-label="Cerrar la sesión"
-                className="grid h-8 w-8 place-items-center rounded-xl border border-line bg-white text-muted shadow-sm transition-colors hover:text-ink"
+                className="touch-target grid h-8 w-8 place-items-center rounded-xl border border-line bg-white text-muted shadow-sm transition-colors hover:text-ink"
               >
                 <LogoutIcon size={15} />
               </button>
@@ -175,7 +175,7 @@ export default function LibraryView() {
 
       <main className="relative mx-auto max-w-5xl px-4 pt-8 pb-20 sm:px-6">
         {/* ------------------------------------------------- cabecera */}
-        <section className="rise-in relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-white via-white to-surface p-6 shadow-card sm:p-8">
+        <section className="rise-in relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-white via-white to-surface p-5 shadow-card sm:p-8">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-0 right-0 w-56 opacity-70"
@@ -188,17 +188,17 @@ export default function LibraryView() {
               <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent" />
               Biblioteca
             </span>
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-[2.5rem] sm:leading-[1.1]">
+            <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:mt-4 sm:text-[2.5rem] sm:leading-[1.1]">
               Tus partituras
             </h1>
-            <p className="mt-3 text-sm leading-relaxed text-muted">
+            <p className="mt-2.5 line-clamp-3 text-[13px] leading-relaxed text-muted sm:mt-3 sm:line-clamp-none sm:text-sm">
               Cada partitura tiene <b className="text-ink">capas independientes</b> de
               anotación: tu digitación, la corrección del director, el análisis
               armónico. Se ocultan, se reordenan y se recolorean por separado.
               Además de dibujar, cada compás admite datos estructurados y cada
               punto admite un hilo de comentarios.
             </p>
-            <div className="mt-5 flex items-center gap-3">
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 sm:mt-5">
               <PaletteStrip />
               <span className="text-[11px] text-muted">Ocho tintas, una por capa</span>
             </div>
@@ -210,7 +210,7 @@ export default function LibraryView() {
           <button
             onClick={() => fileInput.current?.click()}
             disabled={busy}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-b from-ink to-ink-soft px-4 py-2.5 text-sm font-semibold text-white shadow-[0_12px_24px_-14px_rgba(28,27,25,0.9)] transition-all hover:shadow-[0_16px_28px_-14px_rgba(28,27,25,0.95)] active:translate-y-px disabled:opacity-50 disabled:shadow-none"
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-ink to-ink-soft px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_-14px_rgba(28,27,25,0.9)] transition-all hover:shadow-[0_16px_28px_-14px_rgba(28,27,25,0.95)] active:translate-y-px disabled:opacity-50 disabled:shadow-none sm:w-auto sm:py-2.5"
           >
             <UploadIcon size={16} />
             {busy ? "Importando…" : "Importar partitura"}
@@ -218,19 +218,21 @@ export default function LibraryView() {
 
           <button
             onClick={() => createDemo("solo")}
-            className="flex items-center gap-2 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm font-medium shadow-sm transition-colors hover:bg-surface"
+            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-medium shadow-sm transition-colors hover:bg-surface sm:min-h-0 sm:flex-none sm:px-3.5 sm:py-2.5"
           >
-            <SparkIcon size={16} className="text-accent-deep" />
-            Ejemplo para piano solo
+            <SparkIcon size={16} className="shrink-0 text-accent-deep" />
+            <span className="sm:hidden">Piano solo</span>
+            <span className="hidden truncate sm:inline">Ejemplo para piano solo</span>
           </button>
 
           <button
             onClick={() => createDemo("trio")}
-            className="flex items-center gap-2 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm font-medium shadow-sm transition-colors hover:bg-surface"
+            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-medium shadow-sm transition-colors hover:bg-surface sm:min-h-0 sm:flex-none sm:px-3.5 sm:py-2.5"
           >
-            <SparkIcon size={16} className="text-accent-deep" />
-            Ejemplo para trío
-            <span className="hidden text-muted sm:inline">(saxo, piano, bajo)</span>
+            <SparkIcon size={16} className="shrink-0 text-accent-deep" />
+            <span className="sm:hidden">Trío</span>
+            <span className="hidden truncate sm:inline">Ejemplo para trío</span>
+            <span className="hidden text-muted lg:inline">(saxo, piano, bajo)</span>
           </button>
 
           <input
@@ -242,7 +244,7 @@ export default function LibraryView() {
             onChange={(e) => void handleFiles(e.target.files)}
           />
 
-          <span className="text-[11px] text-muted">
+          <span className="w-full text-[11px] text-muted sm:w-auto">
             MusicXML · .mxl · MIDI · copia .json con tus capas
           </span>
         </section>
@@ -281,7 +283,7 @@ export default function LibraryView() {
 
         {/* ------------------------------------------------- resumen */}
         {library.length > 0 && (
-          <dl className="mt-7 grid grid-cols-3 gap-3">
+          <dl className="mt-6 grid grid-cols-3 gap-2 sm:mt-7 sm:gap-3">
             {[
               { label: "Partituras", value: library.length, Icon: MusicIcon },
               { label: "Anotaciones", value: annotationTotal, Icon: PencilIcon },
@@ -289,13 +291,13 @@ export default function LibraryView() {
             ].map((stat) => (
               <div
                 key={stat.label}
-                className="rise-in flex items-center gap-3 rounded-2xl border border-line bg-white p-3 shadow-card"
+                className="rise-in flex items-center gap-2 rounded-2xl border border-line bg-white p-2.5 shadow-card sm:gap-3 sm:p-3"
               >
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent/[0.08] text-accent-deep">
-                  <stat.Icon size={17} />
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-accent/[0.08] text-accent-deep sm:h-9 sm:w-9">
+                  <stat.Icon size={16} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-xl font-semibold leading-none tracking-tight">
+                  <span className="block text-lg font-semibold leading-none tracking-tight sm:text-xl">
                     {stat.value}
                   </span>
                   <span className="mt-1 block truncate text-[11px] text-muted">
